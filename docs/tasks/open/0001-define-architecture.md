@@ -9,7 +9,7 @@
 Agree on stack, security model, vault format, import/export scope, extensibility, sync, repo layout and process — before writing any product code.
 
 ## Acceptance criteria
-- [ ] ADR-0002..0008 each accepted or rejected by the user
+- [x] ADR-0002..0009 each accepted or rejected by the user (all accepted 2026-11-12)
 - [ ] Repo skeleton (layout, CI, lint, test harness) specified in a follow-up task
 - [ ] MVP scope written down as tasks
 
@@ -25,9 +25,21 @@ Agree on stack, security model, vault format, import/export scope, extensibility
 
 - 2026-11-12: User not a Rust developer but OK with Tauri/Rust if Claude is comfortable → ADR-0002 accepted. User chose AGPL-based, open-source, free-to-use → ADR-0009 revised to AGPL-3.0-or-later and accepted. Git identity still pending (user asked how to provide it; answer: name + email in chat, set repo-local).
 
+- 2026-11-12: ADR-0003 accepted with change: biometrics via per-platform provider interface; MVP Android only, Windows Hello after MVP, Apple later, Linux password-only. Remaining to review: ADR-0004..0008 (going through them one by one with the user).
+
+- 2026-11-12: ADR-0004 accepted as written (MVP importers: otpauth URI/QR, Google migration, Aegis, 2FAS). Remaining: ADR-0005..0008.
+
+- 2026-11-12: ADR-0005 accepted (stale licence line fixed to AGPL-3.0-or-later; CI = GitHub Actions). Remaining: ADR-0006..0008.
+
+- 2026-11-12: ADR-0006 accepted with edits (Windows Hello added to post-MVP list; open questions closed). Remaining: ADR-0007, ADR-0008.
+
+- 2026-11-12: ADR-0007 accepted as written. Remaining: ADR-0008.
+
+- 2026-11-12: ADR-0008 accepted as written. All ADRs 0001-0009 are now accepted.
+
 ## Progress log (append-only, dated)
 - 2026-11-12: Created docs scaffolding (CLAUDE.md, ADR + task templates). Drafted ADRs 0002-0006.
 - 2026-11-12: Revised 0002-0006 for Tauri/web UI; added ADR-0007 (extensions) and ADR-0008 (sync).
 
 ## Next step
-Await git identity (name + email) from user, then make the initial commit. User still to review ADR-0003..0008 (security model, formats, layout, scope, extensions, sync) for accept/reject. Then open TASK-0002 (repo skeleton).
+Commit the ADR acceptances. Then open TASK-0002 (repo skeleton: layout, CI, lint, test harness) and write the MVP scope (ADR-0006) as tasks; once both exist, move this task to `done/`.

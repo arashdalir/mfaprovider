@@ -1,6 +1,6 @@
 # ADR-0007: OTP types as pluggable, sandboxed extensions
 
-- Status: proposed
+- Status: accepted (2026-11-12)
 - Date: 2026-11-12
 - Related tasks: TASK-0001
 
@@ -13,7 +13,7 @@ User wants each new OTP type (TOTP, HOTP, Steam, vendor-specific, ...) to be an 
 3. **WASM modules in a sandbox inside the Rust core** — no imports (no fs/network/clock), fuel/memory limits, deterministic.
 4. Built-ins only — simplest, not extensible.
 
-## Decision (proposed)
+## Decision
 - Core defines `OtpType` (id, parameter schema, `generate(secret, params, input) -> Code`, `input` = time or counter). Registry maps `otp_type` ids to implementations.
 - TOTP, HOTP and Steam Guard are **built-ins implemented through this same trait** from day one.
 - Extensions (post-MVP): a package = manifest (id, version, parameter schema for UI form generation, output alphabet/length, required core API version) + `.wasm`. Hosted by `mfa-ext-host` (wasmtime or wasmi) with zero host imports, memory and fuel caps. Output validated against the manifest (length/alphabet) so a module cannot smuggle bulk data out.

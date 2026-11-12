@@ -1,10 +1,10 @@
 # ADR-0004: Vault, export formats and import sources
 
-- Status: proposed (revised 2026-11-12: OTP type extensibility, tombstones for sync)
+- Status: accepted (2026-11-12; MVP importers = first four in the priority list, the rest follow)
 - Date: 2026-11-12
 - Related tasks: TASK-0001
 
-## Decision (proposed)
+## Decision
 - **Entry**: UUID id, `otp_type` (string id, e.g. `totp`, `hotp`, `steam`, or an extension id), issuer, account, secret, type-specific `params` (key/value map validated by the type's schema — algorithm, digits, period, counter, ...), icon, tags/groups, notes, `created_at`, `updated_at`.
 - **Tombstones**: deleted entries leave `{id, deleted_at}` records so deletions survive sync merges (compacted after a retention period).
 - **Unknown types are preserved**: an entry whose `otp_type` has no installed extension is kept intact (shown as "unsupported type"), never dropped or rewritten.

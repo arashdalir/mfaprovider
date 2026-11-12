@@ -1,10 +1,10 @@
 # ADR-0005: Repository layout, architecture and engineering practices
 
-- Status: proposed (revised 2026-11-12 for Tauri)
+- Status: accepted (2026-11-12; CI on GitHub Actions)
 - Date: 2026-11-12
 - Related tasks: TASK-0001
 
-## Decision (proposed)
+## Decision
 Monorepo:
 
 ```
@@ -26,7 +26,7 @@ mfa-provider/
 - UI: feature folders, no business logic in components, typed IPC client generated from Rust types (e.g. specta/ts-rs).
 - CI gates: `cargo fmt` + `clippy -D warnings`, `cargo test`, `cargo deny`/`audit`, `eslint` + `tsc --noEmit`, `vitest`, `npm audit`, Windows + Linux + Android builds.
 - Conventional Commits; trunk-based, short-lived branches; git repo initialised with the skeleton.
-- Licence: undecided (ADR-0006); recommend open source.
+- Licence: AGPL-3.0-or-later (ADR-0009).
 
 ## Consequences
 Clear boundaries; more upfront structure than a single package.
