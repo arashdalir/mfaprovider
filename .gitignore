@@ -1,0 +1,35 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node / web UI
+node_modules/
+dist/
+.vite/
+
+# Tauri / Android / generated
+app/src-tauri/gen/android/.gradle/
+app/src-tauri/gen/android/build/
+app/src-tauri/gen/android/app/build/
+*.apk
+*.aab
+local.properties
+
+# Secrets and vaults must never be committed
+*.vault
+*.mfa
+*.mfaexport
+.env
+.env.*
+*.keystore
+*.jks
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code local settings
+.claude/settings.local.json
