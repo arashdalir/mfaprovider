@@ -23,7 +23,7 @@ A buildable, empty-but-wired monorepo per ADR-0005: Rust workspace (`core/`), Ta
 - 2026-11-16: User floated a web-app mode (Rust HTTP server exposing codes over the internet behind a credential). Claude's view: feasible later because the core is I/O-free, but conflicts with ADR-0006 non-goal "no server component" and ADR-0002 "seeds never in JS", and weakens the model (one login guards all second factors). Not in MVP. If pursued: new ADR "self-hosted server mode", post-sync, LAN/VPN-first, server sends only codes. No work now.
 
 - 2026-11-16: Linter is **oxlint** (Vite template default) instead of eslint named in ADR-0005; accepted as an implementation detail, revisit if a needed rule is missing.
-- 2026-11-16: Tauri bundle identifier set to `org.mfaprovider.app` as a placeholder. It becomes the Android application id and is painful to change after release — **user to confirm/replace before any release**.
+- 2026-11-16: Tauri bundle identifier set to `dev.area_51.android.mfaprovider` (user's own domain/ID; `cargo check` accepts it). It becomes the Android application id, so it must not change after release.
 - 2026-11-16: Tauri shell is its own crate (`app/src-tauri`, edition 2024) outside the `core/` workspace; it will depend on `mfa-core` by path. `tauri-plugin-log` removed (no logging plumbing until needed; never log secrets). Capabilities list is empty; CSP is strict (dev CSP relaxed only for Vite HMR).
 
 ## Progress log (append-only, dated)

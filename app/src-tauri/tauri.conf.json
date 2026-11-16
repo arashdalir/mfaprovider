@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "MFA Provider",
   "version": "0.0.0",
-  "identifier": "org.mfaprovider.app",
+  "identifier": "dev.area_51.android.mfaprovider",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
