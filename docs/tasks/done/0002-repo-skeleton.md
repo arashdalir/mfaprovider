@@ -14,7 +14,7 @@ A buildable, empty-but-wired monorepo per ADR-0005: Rust workspace (`core/`), Ta
 - [x] `app/` Tauri 2 shell + Vite React TS + Tailwind + shadcn/ui builds; strict CSP and minimal capabilities per ADR-0002
 - [x] lint (oxlint), `tsc --noEmit`, `vitest` green
 - [x] AGPL-3.0-or-later `LICENSE`, DCO note in CONTRIBUTING, `cargo deny` config
-- [ ] GitHub Actions CI: Rust + JS gates on Windows and Linux (Android build in a later task) — **written, not yet run**: the repo has no GitHub remote
+- [x] GitHub Actions CI: Rust + JS gates on Windows and Linux (Android build in a later task) — first run green, all 5 jobs (run 43888419423)
 - [x] README with build/test instructions
 
 ## Decisions & notes (append-only, dated)
@@ -43,5 +43,7 @@ A buildable, empty-but-wired monorepo per ADR-0005: Rust workspace (`core/`), Ta
 - 2026-11-16: Known, accepted findings: RUSTSEC-2024-0370 (proc-macro-error via Linux-only gtk-rs 0.18 in Tauri) is ignored in `deny.toml` with reason; `pnpm audit` reports 1 moderate (minimatch) + 1 low (deepmerge), both only via the shadcn CLI dev dependency, not shipped. Actions in CI use major-version tags, not commit SHAs — pin SHAs when the repo goes public.
 - 2026-11-16: ADR-0010 (self-hosted server mode) created as proposed; second login factor still to be decided (see ADR).
 
+- 2026-11-16: Remote `https://github.com/arashdalir/mfaprovider.git` (public) added, `main` pushed. CI run 1 green on all jobs (core ubuntu/windows, app ubuntu/windows, dependency audit). Task complete.
+
 ## Next step
-Create/choose a GitHub remote and push so the CI workflow actually runs; fix whatever it flags, then tick the CI criterion and move this task to `done/`. Then write the MVP scope (ADR-0006) as tasks and close TASK-0001.
+None — done. Follow-up: write the MVP scope (ADR-0006) as tasks and close TASK-0001.
