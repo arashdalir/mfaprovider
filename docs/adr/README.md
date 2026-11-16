@@ -11,3 +11,4 @@
 | [0007](0007-otp-type-extensions.md) | OTP types as sandboxed WASM extensions | accepted |
 | [0008](0008-sync.md) | Sync via user-selected cloud file | accepted |
 | [0009](0009-license.md) | Open-source licence (AGPL-3.0-or-later) | accepted |
+| [0010](0010-self-hosted-server-mode.md) | Self-hosted server mode (web access to codes); supersedes ADR-0006's "no server" non-goal | proposed |
