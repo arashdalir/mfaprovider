@@ -1,8 +1,8 @@
 # TASK-0002: Repo skeleton (layout, CI, lint, test harness)
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-12
-- Updated: 2026-11-12
+- Updated: 2026-11-16
 - Related ADRs: ADR-0002, ADR-0005, ADR-0009
 
 ## Goal
