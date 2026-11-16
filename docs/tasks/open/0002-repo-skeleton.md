@@ -20,6 +20,8 @@ A buildable, empty-but-wired monorepo per ADR-0005: Rust workspace (`core/`), Ta
 ## Decisions & notes (append-only, dated)
 - 2026-11-12: Scope is skeleton only; Android toolchain/build is a separate later task to keep this one verifiable on the Windows dev machine.
 
+- 2026-11-16: User floated a web-app mode (Rust HTTP server exposing codes over the internet behind a credential). Claude's view: feasible later because the core is I/O-free, but conflicts with ADR-0006 non-goal "no server component" and ADR-0002 "seeds never in JS", and weakens the model (one login guards all second factors). Not in MVP. If pursued: new ADR "self-hosted server mode", post-sync, LAN/VPN-first, server sends only codes. No work now.
+
 ## Progress log (append-only, dated)
 - 2026-11-12: Task created.
 - 2026-11-12: Toolchain check: node 24.15, npm 11.12, pnpm 10.33, git 2.55 present. **Missing: Rust (rustc/cargo/rustup) and MSVC Build Tools (no Visual Studio installer found).** winget is available. Awaiting user go-ahead to install.

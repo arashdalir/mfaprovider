@@ -1,0 +1,18 @@
+[package]
+name = "app"
+description = "Tauri shell: thin IPC commands and platform plugins around mfa-core."
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = [] }
