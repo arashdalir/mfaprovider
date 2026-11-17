@@ -1,17 +1,17 @@
 # TASK-0001: Define architecture and infrastructure
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-12
-- Updated: 2026-11-12
-- Related ADRs: ADR-0001 .. ADR-0008
+- Updated: 2026-11-17
+- Related ADRs: ADR-0001 .. ADR-0010
 
 ## Goal
 Agree on stack, security model, vault format, import/export scope, extensibility, sync, repo layout and process — before writing any product code.
 
 ## Acceptance criteria
 - [x] ADR-0002..0009 each accepted or rejected by the user (all accepted 2026-11-12)
-- [ ] Repo skeleton (layout, CI, lint, test harness) specified in a follow-up task
-- [ ] MVP scope written down as tasks
+- [x] Repo skeleton (layout, CI, lint, test harness) specified in a follow-up task (TASK-0002, done)
+- [x] MVP scope written down as tasks (TASK-0003 .. TASK-0013, created 2026-11-17)
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-12: User delegated language/platform choice to Claude; allowed push-back. Linux/Windows/Android now, macOS/iOS later.
@@ -42,4 +42,4 @@ Agree on stack, security model, vault format, import/export scope, extensibility
 - 2026-11-12: Revised 0002-0006 for Tauri/web UI; added ADR-0007 (extensions) and ADR-0008 (sync).
 
 ## Next step
-Commit the ADR acceptances. Then open TASK-0002 (repo skeleton: layout, CI, lint, test harness) and write the MVP scope (ADR-0006) as tasks; once both exist, move this task to `done/`.
+None — done. 2026-11-17: MVP broken into TASK-0003..0013 (dependency order is in each task's notes). Start with TASK-0003 (OTP engine) and TASK-0005 (vault format; begins with a format spec for user review). ADR-0010's second login factor remains open but is post-MVP.
