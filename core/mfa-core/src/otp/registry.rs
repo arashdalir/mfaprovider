@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use super::hotp::Hotp;
 use super::otp_type::OtpType;
+use super::steam::Steam;
 use super::totp::Totp;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -22,7 +23,7 @@ pub struct OtpRegistry {
 impl OtpRegistry {
     #[must_use]
     pub fn with_builtins() -> Self {
-        let builtins: [Box<dyn OtpType>; 2] = [Box::new(Hotp), Box::new(Totp)];
+        let builtins: [Box<dyn OtpType>; 3] = [Box::new(Hotp), Box::new(Totp), Box::new(Steam)];
         Self {
             types: builtins.into_iter().map(|t| (t.id(), t)).collect(),
         }
@@ -72,6 +73,7 @@ mod tests {
         let registry = OtpRegistry::with_builtins();
         assert_eq!(registry.get("totp").map(OtpType::id), Some("totp"));
         assert_eq!(registry.get("hotp").map(OtpType::id), Some("hotp"));
+        assert_eq!(registry.get("steam").map(OtpType::id), Some("steam"));
     }
 
     #[test]

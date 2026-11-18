@@ -75,24 +75,31 @@ impl Shared {
 }
 
 pub(super) fn hotp_code(secret: &Secret, shared: &Shared, counter: u64) -> Result<Code, OtpError> {
-    if secret.as_bytes().is_empty() {
-        return Err(OtpError::EmptySecret);
-    }
-    let hash = shared
-        .algorithm
-        .hmac(secret.as_bytes(), &counter.to_be_bytes());
-    let offset = usize::from(hash[hash.len() - 1] & 0x0f);
-    let truncated = u32::from_be_bytes([
-        hash[offset] & 0x7f,
-        hash[offset + 1],
-        hash[offset + 2],
-        hash[offset + 3],
-    ]);
+    let truncated = truncated_value(secret, shared.algorithm, counter)?;
     let value = truncated % 10_u32.pow(shared.digits);
     Ok(Code::new(format!(
         "{value:0width$}",
         width = shared.digits as usize
     )))
+}
+
+/// RFC 4226 dynamic truncation: the 31-bit integer every HMAC-based code is derived from.
+pub(super) fn truncated_value(
+    secret: &Secret,
+    algorithm: Algorithm,
+    counter: u64,
+) -> Result<u32, OtpError> {
+    if secret.as_bytes().is_empty() {
+        return Err(OtpError::EmptySecret);
+    }
+    let hash = algorithm.hmac(secret.as_bytes(), &counter.to_be_bytes());
+    let offset = usize::from(hash[hash.len() - 1] & 0x0f);
+    Ok(u32::from_be_bytes([
+        hash[offset] & 0x7f,
+        hash[offset + 1],
+        hash[offset + 2],
+        hash[offset + 3],
+    ]))
 }
 
 #[cfg(test)]
