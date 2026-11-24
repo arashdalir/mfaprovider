@@ -1,7 +1,7 @@
 use super::algorithm::Algorithm;
 use super::hotp::truncated_value;
-use super::otp_type::{Code, OtpError, OtpInput, OtpType};
-use super::params::{resolve, ParamSpec, Params};
+use super::otp_type::{Code, CodeTiming, OtpError, OtpInput, OtpType};
+use super::params::{resolve, ParamError, ParamSpec, Params};
 use crate::secret::Secret;
 
 const ALPHABET: &[u8; 26] = b"23456789BCDFGHJKMNPQRTVWXY";
@@ -20,6 +20,13 @@ impl OtpType for Steam {
 
     fn schema(&self) -> &'static [ParamSpec] {
         &[]
+    }
+
+    fn timing(&self, params: &Params) -> Result<CodeTiming, ParamError> {
+        resolve(self.schema(), params)?;
+        Ok(CodeTiming::Time {
+            period_seconds: PERIOD_SECONDS,
+        })
     }
 
     fn generate(

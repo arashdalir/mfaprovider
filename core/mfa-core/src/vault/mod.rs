@@ -1,6 +1,7 @@
 //! The encrypted vault: data model, payload and file container (ADR-0011).
 
 mod clock;
+mod codes;
 mod container;
 mod entries;
 mod error;
@@ -14,6 +15,7 @@ mod storage;
 mod test_support;
 
 pub use clock::Clock;
+pub use codes::{CodeOutcome, EntryCode};
 pub use container::{create, open, OpenedVault};
 pub use entries::{EntryChanges, EntryError, NewEntry};
 pub use error::VaultError;

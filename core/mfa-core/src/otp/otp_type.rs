@@ -42,10 +42,23 @@ pub enum OtpError {
     WrongInput { expected: &'static str },
 }
 
+/// What a type's codes are derived from, so callers can pick the right [`OtpInput`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CodeTiming {
+    /// Event-based: the code for this counter value.
+    Counter(u64),
+    /// Time-based: a new code every `period_seconds`.
+    Time { period_seconds: u64 },
+}
+
 pub trait OtpType: Send + Sync {
     fn id(&self) -> &'static str;
 
     fn schema(&self) -> &'static [ParamSpec];
+
+    /// # Errors
+    /// If `params` do not satisfy [`OtpType::schema`].
+    fn timing(&self, params: &Params) -> Result<CodeTiming, ParamError>;
 
     /// # Errors
     /// On invalid parameters, an empty secret, or an input kind this type cannot use.

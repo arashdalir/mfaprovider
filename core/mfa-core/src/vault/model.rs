@@ -3,6 +3,7 @@ use std::fmt;
 
 use ciborium::Value;
 
+use super::rng::{random_array, Rng};
 use crate::otp::Params;
 use crate::secret::Secret;
 
@@ -22,6 +23,14 @@ impl EntryId {
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; 16] {
         &self.0
+    }
+
+    /// A random (version 4) UUID.
+    pub fn random(rng: &mut dyn Rng) -> Self {
+        let mut bytes = random_array::<16>(rng);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        Self(bytes)
     }
 }
 
@@ -114,6 +123,17 @@ mod tests {
             0x77, 0x88,
         ]);
         assert_eq!(id.to_string(), "12345678-9abc-def0-1122-334455667788");
+    }
+
+    #[test]
+    fn random_ids_are_version_4_uuids_and_differ() {
+        let mut rng = crate::vault::test_support::CountingRng(0xff);
+        let first = EntryId::random(&mut rng);
+        let second = EntryId::random(&mut rng);
+        assert_ne!(first, second);
+        let text = first.to_string();
+        assert_eq!(text.as_bytes()[14], b'4');
+        assert!(matches!(text.as_bytes()[19], b'8' | b'9' | b'a' | b'b'));
     }
 
     #[test]

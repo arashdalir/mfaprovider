@@ -49,7 +49,7 @@ impl OtpRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::otp::{Code, OtpError, OtpInput, ParamSpec, Params};
+    use crate::otp::{Code, CodeTiming, OtpError, OtpInput, ParamError, ParamSpec, Params};
     use crate::secret::Secret;
 
     struct Fake;
@@ -57,6 +57,10 @@ mod tests {
     impl OtpType for Fake {
         fn id(&self) -> &'static str {
             "fake"
+        }
+
+        fn timing(&self, _: &Params) -> Result<CodeTiming, ParamError> {
+            Ok(CodeTiming::Counter(0))
         }
 
         fn schema(&self) -> &'static [ParamSpec] {

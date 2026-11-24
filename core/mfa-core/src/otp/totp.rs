@@ -1,6 +1,6 @@
 use super::hotp::{hotp_code, Shared, ALGORITHM, DIGITS};
-use super::otp_type::{Code, OtpError, OtpInput, OtpType};
-use super::params::{resolve, ParamKind, ParamSpec, Params};
+use super::otp_type::{Code, CodeTiming, OtpError, OtpInput, OtpType};
+use super::params::{resolve, ParamError, ParamKind, ParamSpec, Params};
 use crate::secret::Secret;
 
 const PERIOD: ParamSpec = ParamSpec {
@@ -21,6 +21,13 @@ impl OtpType for Totp {
 
     fn schema(&self) -> &'static [ParamSpec] {
         &SCHEMA
+    }
+
+    fn timing(&self, params: &Params) -> Result<CodeTiming, ParamError> {
+        let resolved = resolve(&SCHEMA, params)?;
+        Ok(CodeTiming::Time {
+            period_seconds: resolved.integer(PERIOD.name),
+        })
     }
 
     fn generate(

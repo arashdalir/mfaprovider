@@ -6,7 +6,7 @@
 use thiserror::Error;
 
 use super::model::{Entry, EntryId, Extra, Tombstone, VaultData};
-use crate::otp::{OtpRegistry, ParamError, Params};
+use crate::otp::{CodeTiming, OtpRegistry, ParamError, Params};
 use crate::secret::Secret;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -23,6 +23,10 @@ pub enum EntryError {
     EmptySecret,
     #[error("position {position} is outside a list of {len} entries")]
     PositionOutOfRange { position: usize, len: usize },
+    #[error("entry {0} is not counter-based")]
+    NotCounterBased(EntryId),
+    #[error("the counter cannot be advanced any further")]
+    CounterOverflow,
 }
 
 /// What the user supplies when adding an account.
@@ -127,6 +131,31 @@ impl VaultData {
         }
         entry.updated_at = now_ms;
         Ok(())
+    }
+
+    /// Moves a counter-based (HOTP) entry on to its next code and returns the new counter.
+    ///
+    /// # Errors
+    /// [`EntryError::NotFound`], [`EntryError::UnknownType`], [`EntryError::NotCounterBased`],
+    /// or [`EntryError::CounterOverflow`] at the largest counter value.
+    pub fn advance_counter(
+        &mut self,
+        id: EntryId,
+        registry: &OtpRegistry,
+        now_ms: i64,
+    ) -> Result<u64, EntryError> {
+        let position = self.position_of(id)?;
+        let entry = &mut self.entries[position];
+        let implementation = registry
+            .get(&entry.otp_type)
+            .ok_or_else(|| EntryError::UnknownType(entry.otp_type.clone()))?;
+        let CodeTiming::Counter(current) = implementation.timing(&entry.params)? else {
+            return Err(EntryError::NotCounterBased(id));
+        };
+        let next = current.checked_add(1).ok_or(EntryError::CounterOverflow)?;
+        entry.params = std::mem::take(&mut entry.params).with("counter", &next.to_string());
+        entry.updated_at = now_ms;
+        Ok(next)
     }
 
     /// Removes the entry (its secret is wiped as it drops) and leaves a tombstone.
@@ -436,6 +465,59 @@ mod tests {
         };
         assert_eq!(
             data.edit_entry(id(2), params, &registry(), 5),
+            Err(EntryError::UnknownType("vendor-x".into()))
+        );
+    }
+
+    fn hotp_vault(params: Params) -> VaultData {
+        let mut data = VaultData::empty(0);
+        let mut new = new_entry("Bank", "me");
+        new.otp_type = "hotp".into();
+        new.params = params;
+        data.add_entry(id(1), new, &registry(), 10).unwrap();
+        data
+    }
+
+    #[test]
+    fn advancing_a_hotp_entry_stores_the_next_counter() {
+        let mut data = hotp_vault(Params::new().with("digits", "8"));
+        assert_eq!(data.advance_counter(id(1), &registry(), 50), Ok(1));
+        assert_eq!(data.advance_counter(id(1), &registry(), 60), Ok(2));
+        let entry = data.entry(id(1)).unwrap();
+        assert_eq!(entry.params.get("counter"), Some("2"));
+        assert_eq!(entry.params.get("digits"), Some("8"));
+        assert_eq!(entry.updated_at, 60);
+    }
+
+    #[test]
+    fn the_largest_counter_cannot_be_advanced() {
+        let mut data = hotp_vault(Params::new().with("counter", &u64::MAX.to_string()));
+        assert_eq!(
+            data.advance_counter(id(1), &registry(), 50),
+            Err(EntryError::CounterOverflow)
+        );
+        let entry = data.entry(id(1)).unwrap();
+        assert_eq!(
+            entry.params.get("counter"),
+            Some(u64::MAX.to_string().as_str())
+        );
+        assert_eq!(entry.updated_at, 10);
+    }
+
+    #[test]
+    fn only_counter_based_entries_can_be_advanced() {
+        let mut data = vault_with(&[("A", "a")]);
+        assert_eq!(
+            data.advance_counter(id(1), &registry(), 0),
+            Err(EntryError::NotCounterBased(id(1)))
+        );
+        assert_eq!(
+            data.advance_counter(id(9), &registry(), 0),
+            Err(EntryError::NotFound(id(9)))
+        );
+        let mut unsupported = crate::vault::test_support::sample_vault();
+        assert_eq!(
+            unsupported.advance_counter(id(2), &registry(), 0),
             Err(EntryError::UnknownType("vendor-x".into()))
         );
     }

@@ -1,6 +1,6 @@
 use super::algorithm::Algorithm;
-use super::otp_type::{Code, OtpError, OtpInput, OtpType};
-use super::params::{resolve, ParamKind, ParamSpec, Params, Resolved};
+use super::otp_type::{Code, CodeTiming, OtpError, OtpInput, OtpType};
+use super::params::{resolve, ParamError, ParamKind, ParamSpec, Params, Resolved};
 use crate::secret::Secret;
 
 pub(super) const ALGORITHM: ParamSpec = ParamSpec {
@@ -15,18 +15,16 @@ pub(super) const DIGITS: ParamSpec = ParamSpec {
     default: "6",
 };
 
-static SCHEMA: [ParamSpec; 3] = [
-    ALGORITHM,
-    DIGITS,
-    ParamSpec {
-        name: "counter",
-        kind: ParamKind::Integer {
-            min: 0,
-            max: u64::MAX,
-        },
-        default: "0",
+pub(super) const COUNTER: ParamSpec = ParamSpec {
+    name: "counter",
+    kind: ParamKind::Integer {
+        min: 0,
+        max: u64::MAX,
     },
-];
+    default: "0",
+};
+
+static SCHEMA: [ParamSpec; 3] = [ALGORITHM, DIGITS, COUNTER];
 
 /// RFC 4226. The stored `counter` parameter is the entry's current value; the caller
 /// passes it as [`OtpInput::Counter`].
@@ -39,6 +37,11 @@ impl OtpType for Hotp {
 
     fn schema(&self) -> &'static [ParamSpec] {
         &SCHEMA
+    }
+
+    fn timing(&self, params: &Params) -> Result<CodeTiming, ParamError> {
+        let resolved = resolve(&SCHEMA, params)?;
+        Ok(CodeTiming::Counter(resolved.integer(COUNTER.name)))
     }
 
     fn generate(

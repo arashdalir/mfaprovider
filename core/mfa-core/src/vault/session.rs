@@ -5,12 +5,15 @@ use std::time::Duration;
 use thiserror::Error;
 
 use super::clock::Clock;
+use super::codes::EntryCode;
 use super::container::{self, OpenedVault};
+use super::entries::{EntryChanges, EntryError, NewEntry};
 use super::error::VaultError;
 use super::kdf::KdfParams;
-use super::model::VaultData;
+use super::model::{EntryId, VaultData};
 use super::rng::Rng;
 use super::storage::{Storage, StorageError};
+use crate::otp::OtpRegistry;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SessionError {
@@ -20,6 +23,8 @@ pub enum SessionError {
     NoVault,
     #[error("a vault already exists")]
     AlreadyExists,
+    #[error(transparent)]
+    Entry(#[from] EntryError),
     #[error(transparent)]
     Vault(#[from] VaultError),
     #[error(transparent)]
@@ -178,15 +183,90 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
     /// # Errors
     /// [`SessionError::Locked`], or an encryption or storage error from saving.
     pub fn edit<T>(&mut self, change: impl FnOnce(&mut VaultData) -> T) -> Result<T, SessionError> {
+        self.try_edit(|data| Ok(change(data)))
+    }
+
+    /// Like [`VaultSession::edit`] for a change that can be refused. If `change` returns an
+    /// error nothing is stamped or saved and it does not count as activity, so it must not
+    /// have modified the data (the [`VaultData`] entry operations all validate first).
+    ///
+    /// # Errors
+    /// [`SessionError::Locked`], the change's own error, or an encryption or storage error.
+    pub fn try_edit<T>(
+        &mut self,
+        change: impl FnOnce(&mut VaultData) -> Result<T, EntryError>,
+    ) -> Result<T, SessionError> {
         self.enforce_idle_timeout();
         let (now_unix, now_monotonic) = (self.clock.unix_ms(), self.clock.monotonic_ms());
         let unlocked = self.unlocked.as_mut().ok_or(SessionError::Locked)?;
-        let result = change(&mut unlocked.data);
+        let result = change(&mut unlocked.data)?;
         unlocked.data.updated_at = now_unix;
         unlocked.last_activity_ms = now_monotonic;
         unlocked.dirty = true;
         Self::persist(unlocked, &mut self.storage, &mut self.rng)?;
         Ok(result)
+    }
+
+    /// Adds an account under a fresh random id and saves.
+    ///
+    /// # Errors
+    /// As [`VaultData::add_entry`], plus those of [`VaultSession::edit`].
+    pub fn add_entry(
+        &mut self,
+        new: NewEntry,
+        registry: &OtpRegistry,
+    ) -> Result<EntryId, SessionError> {
+        let id = EntryId::random(&mut self.rng);
+        let now = self.clock.unix_ms();
+        self.try_edit(|data| data.add_entry(id, new, registry, now))?;
+        Ok(id)
+    }
+
+    /// # Errors
+    /// As [`VaultData::edit_entry`], plus those of [`VaultSession::edit`].
+    pub fn edit_entry(
+        &mut self,
+        id: EntryId,
+        changes: EntryChanges,
+        registry: &OtpRegistry,
+    ) -> Result<(), SessionError> {
+        let now = self.clock.unix_ms();
+        self.try_edit(|data| data.edit_entry(id, changes, registry, now))
+    }
+
+    /// # Errors
+    /// As [`VaultData::delete_entry`], plus those of [`VaultSession::edit`].
+    pub fn delete_entry(&mut self, id: EntryId) -> Result<(), SessionError> {
+        let now = self.clock.unix_ms();
+        self.try_edit(|data| data.delete_entry(id, now))
+    }
+
+    /// # Errors
+    /// As [`VaultData::move_entry`], plus those of [`VaultSession::edit`].
+    pub fn move_entry(&mut self, id: EntryId, position: usize) -> Result<(), SessionError> {
+        self.try_edit(|data| data.move_entry(id, position))
+    }
+
+    /// Moves a counter-based entry to its next code and saves; returns the new counter.
+    ///
+    /// # Errors
+    /// As [`VaultData::advance_counter`], plus those of [`VaultSession::edit`].
+    pub fn advance_counter(
+        &mut self,
+        id: EntryId,
+        registry: &OtpRegistry,
+    ) -> Result<u64, SessionError> {
+        let now = self.clock.unix_ms();
+        self.try_edit(|data| data.advance_counter(id, registry, now))
+    }
+
+    /// The current code of every entry. Like [`VaultSession::data`], not user activity.
+    ///
+    /// # Errors
+    /// [`SessionError::Locked`].
+    pub fn codes(&mut self, registry: &OtpRegistry) -> Result<Vec<EntryCode>, SessionError> {
+        let now = self.clock.unix_ms();
+        Ok(self.data()?.codes(registry, now))
     }
 
     /// True while the last change could not be saved.
@@ -529,6 +609,123 @@ mod tests {
         assert!(session.is_unlocked());
         session.notify(SystemEvent::Backgrounded);
         assert!(!session.is_unlocked());
+    }
+
+    fn new_totp(account: &str) -> NewEntry {
+        NewEntry {
+            otp_type: "totp".into(),
+            issuer: "Example".into(),
+            account: account.into(),
+            secret: crate::secret::Secret::new(b"12345678901234567890".to_vec()),
+            params: crate::otp::Params::new().with("digits", "8"),
+            icon: None,
+            tags: Vec::new(),
+            notes: String::new(),
+        }
+    }
+
+    fn registry() -> OtpRegistry {
+        OtpRegistry::with_builtins()
+    }
+
+    #[test]
+    fn entry_operations_are_saved_and_survive_a_restart() {
+        let (mut session, storage, clock) = created(LockPolicy::default());
+        let first = session.add_entry(new_totp("a"), &registry()).unwrap();
+        let second = session.add_entry(new_totp("b"), &registry()).unwrap();
+        assert_ne!(first, second);
+        session.move_entry(second, 0).unwrap();
+        let rename = EntryChanges {
+            account: Some("renamed".into()),
+            ..EntryChanges::default()
+        };
+        session.edit_entry(first, rename, &registry()).unwrap();
+        session.delete_entry(second).unwrap();
+
+        let mut restarted = session_over(&storage, &clock, LockPolicy::default());
+        restarted.unlock(PASSWORD).unwrap();
+        let data = restarted.data().unwrap();
+        assert_eq!(data.entries.len(), 1);
+        assert_eq!(data.entries[0].account, "renamed");
+        assert_eq!(data.tombstones.len(), 1);
+        assert_eq!(data.tombstones[0].id, second);
+    }
+
+    #[test]
+    fn a_refused_operation_writes_nothing_and_is_not_activity() {
+        let (mut session, storage, clock) = created(short_idle());
+        let before = storage.bytes();
+        clock.advance_secs(50);
+        let mut bad = new_totp("a");
+        bad.otp_type = "vendor-x".into();
+        assert_eq!(
+            session.add_entry(bad, &registry()),
+            Err(SessionError::Entry(EntryError::UnknownType(
+                "vendor-x".into()
+            )))
+        );
+        assert_eq!(storage.bytes(), before);
+        assert!(!session.is_dirty());
+        clock.advance_secs(10);
+        assert!(
+            !session.is_unlocked(),
+            "a refused operation must not postpone the lock"
+        );
+    }
+
+    #[test]
+    fn entry_operations_need_an_unlocked_vault() {
+        let (mut session, _, _) = created(LockPolicy::default());
+        let id = session.add_entry(new_totp("a"), &registry()).unwrap();
+        session.lock();
+        assert_eq!(
+            session.add_entry(new_totp("b"), &registry()),
+            Err(SessionError::Locked)
+        );
+        assert_eq!(session.delete_entry(id), Err(SessionError::Locked));
+        assert_eq!(session.move_entry(id, 0), Err(SessionError::Locked));
+        assert_eq!(
+            session.advance_counter(id, &registry()),
+            Err(SessionError::Locked)
+        );
+        assert_eq!(session.codes(&registry()).err(), Some(SessionError::Locked));
+    }
+
+    #[test]
+    fn codes_follow_the_clock_and_do_not_count_as_activity() {
+        let (mut session, _, clock) = created(short_idle());
+        session.add_entry(new_totp("a"), &registry()).unwrap();
+        let shown =
+            |session: &mut TestSession| match &session.codes(&registry()).unwrap()[0].outcome {
+                crate::vault::CodeOutcome::Ready(live) => live.clone(),
+                other => panic!("unexpected {other:?}"),
+            };
+        let first = shown(&mut session);
+        clock.advance_secs(30);
+        let second = shown(&mut session);
+        assert_ne!(first.code, second.code);
+        assert_eq!(first.validity.map(|v| v.period_seconds), Some(30));
+        clock.advance_secs(30);
+        assert_eq!(session.codes(&registry()).err(), Some(SessionError::Locked));
+    }
+
+    #[test]
+    fn advancing_a_hotp_counter_is_saved() {
+        let (mut session, storage, clock) = created(LockPolicy::default());
+        let mut new = new_totp("a");
+        new.otp_type = "hotp".into();
+        let id = session.add_entry(new, &registry()).unwrap();
+        assert_eq!(session.advance_counter(id, &registry()), Ok(1));
+        let mut restarted = session_over(&storage, &clock, LockPolicy::default());
+        restarted.unlock(PASSWORD).unwrap();
+        let counter = restarted
+            .data()
+            .unwrap()
+            .entry(id)
+            .unwrap()
+            .params
+            .get("counter");
+        assert_eq!(counter, Some("1"));
     }
 
     #[test]
