@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["mfa-core"]
+members = ["mfa-core", "mfa-storage"]
 
 [workspace.package]
 version = "0.0.0"

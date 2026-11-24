@@ -9,12 +9,12 @@
 A `Vault` session type in `mfa-core` with create / unlock / lock / change-password, backed by injected storage, clock and RNG traits. The vault key exists in memory only while unlocked and is zeroized on lock. Auto-lock policy (timeout, background, suspend) is core logic driven by injected time events.
 
 ## Acceptance criteria
-- [ ] Create vault with master password; unlock; lock zeroizes key (verified by test)
-- [ ] Change master password re-wraps the vault key without re-encrypting entries
-- [ ] Auto-lock after configurable idle timeout via injected clock
-- [ ] Atomic save (temp file + rename) through the storage trait; in-memory fake for tests
-- [ ] Wrong password: constant-behaviour failure, no secret-dependent logging
-- [ ] CI green
+- [x] Create vault with master password; unlock; lock drops the key and entries (tests verify the locked state; the wiping itself is `zeroize`'s job on drop and is not observable — see notes)
+- [x] Change master password re-wraps the vault key without re-encrypting entries (test asserts the body bytes are identical before and after)
+- [x] Auto-lock after configurable idle timeout via injected clock (plus background/suspend events)
+- [x] Atomic save (temp file + rename) through the storage trait; in-memory fake for tests (`FileStorage` in `mfa-storage` implements it on a real filesystem)
+- [x] Wrong password: constant-behaviour failure, no secret-dependent logging (single `UnwrapFailed` error; the core has no logging at all; failed attempts leave the stored file untouched)
+- [ ] CI green (local: 115 tests, fmt, clippy `-D warnings`, `cargo deny` pass on Windows; Linux-only paths — directory fsync, 0600 mode — are verified only by CI)
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: 0005. Blocks 0007. Biometric unlock is a separate `BiometricProvider` (TASK-0012); this task only leaves the extension seam in the key-wrapping design (ADR-0003).
@@ -29,6 +29,9 @@ A `Vault` session type in `mfa-core` with create / unlock / lock / change-passwo
 ## Progress log (append-only, dated)
 - 2026-11-17: Task created.
 - 2026-11-24: Design recorded; starting with the core session, then `mfa-storage`.
+- 2026-11-24: Implemented `vault/{clock,storage,session}.rs` (`Clock`, `Storage`, `MemoryStorage`, `VaultSession`, `LockPolicy`, `SystemEvent`, `SessionError`) with 26 new core tests (commit ef32c78). Added crate `core/mfa-storage` (`FileStorage`: temp file → fsync → rename, directory fsync and mode 0600 on Unix) with 8 unit tests on real temp directories plus 4 cross-crate integration tests (`tests/session_roundtrip.rs`) that drive a real session over a real file using only the public API, including a check that the file on disk contains neither seed, account name nor password. 115 tests pass locally.
+- 2026-11-24: Fixed along the way: clippy flagged platform-specific code in `FileStorage` (unused import / `unnecessary_wraps` on Windows) — restructured with `cfg` blocks so Windows and Linux both lint clean; `cargo deny` flagged the path dependency on `mfa-core` as a wildcard — fixed by giving it an explicit `version`, no policy change.
+- 2026-11-24: Known gaps carried forward: production `Clock` (system time + `Instant`) and `Rng` (OS randomness via `getrandom`) belong in the Tauri shell (TASK-0007); a crash-injection test of the real atomic rename is not possible portably — atomicity rests on `fs::rename` replace semantics plus the tests above; wrong-password throttling is TASK-0007/0008.
 
 ## Next step
-Implement `vault/{clock,storage,session}.rs` test-first with `MemoryStorage` and a fake clock; then create `core/mfa-storage` with `FileStorage` and filesystem tests; commit after each green step.
+Push, confirm CI is green on Linux and Windows (watch the Unix-only tests), tick the CI criterion and move this task to `done/`. Then TASK-0007 (entry management and typed IPC), which needs the ADR on IPC type generation first.

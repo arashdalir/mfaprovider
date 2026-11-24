@@ -1,0 +1,16 @@
+[package]
+name = "mfa-storage"
+description = "Filesystem Storage for the vault: atomic replace via temp file, fsync and rename."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mfa-core = { path = "../mfa-core", version = "0.0.0" }
+
+[dev-dependencies]
+tempfile = "3.27.0"
