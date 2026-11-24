@@ -25,6 +25,28 @@ impl EntryId {
         &self.0
     }
 
+    /// Reads the form [`EntryId`] displays as: 32 hex digits with hyphens after digits
+    /// 8, 12, 16 and 20.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.as_bytes();
+        let hyphens = [8, 13, 18, 23];
+        if text.len() != 36 || hyphens.iter().any(|&index| text[index] != b'-') {
+            return None;
+        }
+        let digits: Vec<u32> = text
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !hyphens.contains(index))
+            .map(|(_, character)| char::from(*character).to_digit(16))
+            .collect::<Option<_>>()?;
+        let mut bytes = [0_u8; 16];
+        for (byte, pair) in bytes.iter_mut().zip(digits.chunks(2)) {
+            *byte = u8::try_from(pair[0] * 16 + pair[1]).ok()?;
+        }
+        Some(Self(bytes))
+    }
+
     /// A random (version 4) UUID.
     pub fn random(rng: &mut dyn Rng) -> Self {
         let mut bytes = random_array::<16>(rng);
@@ -123,6 +145,34 @@ mod tests {
             0x77, 0x88,
         ]);
         assert_eq!(id.to_string(), "12345678-9abc-def0-1122-334455667788");
+    }
+
+    #[test]
+    fn ids_parse_from_what_they_display_as() {
+        let original = EntryId::from_bytes([
+            0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88,
+        ]);
+        assert_eq!(EntryId::parse(&original.to_string()), Some(original));
+        assert_eq!(
+            EntryId::parse("12345678-9ABC-DEF0-1122-334455667788"),
+            Some(original)
+        );
+    }
+
+    #[test]
+    fn malformed_ids_do_not_parse() {
+        for text in [
+            "",
+            "12345678-9abc-def0-1122-33445566778",
+            "12345678-9abc-def0-1122-3344556677889",
+            "123456789abc-def0-1122-334455667788-",
+            "12345678-9abc-def0-1122-33445566778g",
+            "12345678-9abc-def0-1122-33445566778é",
+            "+2345678-9abc-def0-1122-334455667788",
+        ] {
+            assert_eq!(EntryId::parse(text), None, "{text:?}");
+        }
     }
 
     #[test]
