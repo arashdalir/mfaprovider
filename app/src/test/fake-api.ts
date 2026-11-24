@@ -25,6 +25,12 @@ export function fakeApi(overrides: Partial<VaultApi> = {}): VaultApi {
     draftFromImage: vi.fn().mockResolvedValue([]),
     addDraft: vi.fn().mockResolvedValue("new-id"),
     discardDrafts: resolved(),
+    listImportFormats: vi
+      .fn()
+      .mockResolvedValue([{ id: "otpauth-list", label: "Text file of otpauth:// links" }]),
+    importPreview: vi.fn().mockResolvedValue({ items: [], skipped: [] }),
+    importApply: vi.fn().mockResolvedValue({ added: 0, replaced: 0, skipped: 0 }),
+    importDiscard: resolved(),
     ...overrides,
   };
 }

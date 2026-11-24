@@ -6,6 +6,13 @@ import type { DraftEditsRequest } from "./generated/DraftEditsRequest";
 import type { DraftView } from "./generated/DraftView";
 import type { EntryChangesRequest } from "./generated/EntryChangesRequest";
 import type { EntryView } from "./generated/EntryView";
+import type { ImportChoice } from "./generated/ImportChoice";
+import type { ImportDecision } from "./generated/ImportDecision";
+import type { ImportFormatView } from "./generated/ImportFormatView";
+import type { ImportItemView } from "./generated/ImportItemView";
+import type { ImportPreview } from "./generated/ImportPreview";
+import type { ImportResult } from "./generated/ImportResult";
+import type { ImportStatus } from "./generated/ImportStatus";
 import type { IpcError } from "./generated/IpcError";
 import type { IpcErrorCode } from "./generated/IpcErrorCode";
 import type { NewEntryRequest } from "./generated/NewEntryRequest";
@@ -17,6 +24,15 @@ export type {
   CodeState,
 } from "./generated/CodeState";
 export type { DraftEditsRequest, DraftView };
+export type {
+  ImportChoice,
+  ImportDecision,
+  ImportFormatView,
+  ImportItemView,
+  ImportPreview,
+  ImportResult,
+  ImportStatus,
+};
 export type { EntryChangesRequest, EntryView, IpcError, IpcErrorCode, NewEntryRequest };
 export type { RevealedSecret, VaultStatus };
 export type { OtpTypeView };
@@ -77,4 +93,10 @@ export const ipc = {
   draftFromImage: (image: string) => call<DraftView[]>("draft_from_image", { image }),
   addDraft: (id: number, edits: DraftEditsRequest) => call<string>("add_draft", { id, edits }),
   discardDrafts: () => call<void>("discard_drafts"),
+  listImportFormats: () => call<ImportFormatView[]>("list_import_formats"),
+  /** `text` is the file's content; nothing in the vault changes until `importApply`. */
+  importPreview: (format: string, text: string) =>
+    call<ImportPreview>("import_preview", { format, text }),
+  importApply: (choices: ImportChoice[]) => call<ImportResult>("import_apply", { choices }),
+  importDiscard: () => call<void>("import_discard"),
 };

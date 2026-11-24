@@ -9,10 +9,10 @@
 Importers behind one `Importer` interface in `mfa-formats` for Google Authenticator `otpauth-migration://`, Aegis (plain + encrypted) and 2FAS, with the preview-then-merge flow: new / duplicate / conflicting entries, per-entry skip, replace or keep-both. Duplicate = same issuer + account + secret.
 
 ## Acceptance criteria
-- [ ] `Importer` interface; one isolated codec per source
+- [ ] `Importer` interface; one isolated codec per source (interface + link-list codec done; Google, Aegis, 2FAS open)
 - [ ] Fixtures per format (including encrypted Aegis) with provenance noted; no real seeds in the repo
-- [ ] Merge planner returns a preview without mutating the vault; applying it is a separate step
-- [ ] UI import wizard: pick file/URI → preview → apply
+- [x] Merge planner returns a preview without mutating the vault; applying it is a separate step
+- [x] UI import wizard: pick file → preview → apply (file only; URI paste via TASK-0009; not clicked through in the real app)
 - [ ] Corrupt/unknown-version files fail cleanly; imports never log secrets
 - [ ] CI green
 
@@ -28,5 +28,9 @@ Importers behind one `Importer` interface in `mfa-formats` for Google Authentica
 
 - 2026-11-24: Stage 2 done. Shell: DTOs (`ImportFormatView`, `ImportPreview`/`ImportItemView`, `ImportChoice`, `ImportResult`, `ImportDecision`, `ImportStatus`), pending import in `VaultService` (replaced by a new preview, dropped on lock/idle/tick), commands `list_import_formats`, `import_preview`, `import_apply`, `import_discard`; apply re-plans against the current vault, treats items without a choice as skipped, refuses unknown/repeated item ids and impossible replaces, and is one saved change; after a failed save the file is not offered again (the change is in memory and unsaved, so a retry would double-add). 25 new shell tests (96 total). **Deviation from the task text (Claude's decision):** a new status for the *same secret under a different name* (flagged `already_under_other_name`, skipped by default, replaceable) — otherwise an issuer-less WinAuth export would silently duplicate accounts added by hand with an issuer. The no-secrets tripwire flagged my first name for it (`SameSecret`); renamed rather than loosening the tripwire. A test RNG that wrapped after 256 bytes made generated ids collide; the core's atomic import refused it correctly with nothing changed, test RNG fixed.
 
+- 2026-11-24: Stage 3 done (UI): `features/import` — `readTextFile` (UTF-8, UTF-16 with BOM, fatal decoding, 5 MiB), `ImportScreen` (format + file → preview → done), `ImportPreviewStep` (per-item checkbox for new accounts, select for duplicates/conflicts with Replace only where possible, bulk Skip all / Suggested choices, live "Will add/replace/skip" line, unreadable lines listed with line numbers, failures keep the review open, Cancel discards the pending file), "Import" button on the vault screen. UI tests: 144 (20 new). **WinAuth path is complete end to end**; the user's real export (58 accounts) imports cleanly in the core check.
+- 2026-11-24: Local test-runner anomaly, not understood: after the stage-3 files were added, `vitest` with the default pool failed every file with "failed to find the current suite" (setup.ts), also at the previously green committed state, while `--pool=vmThreads` passes all 144. A `tauri dev` window and its Vite server were running on the machine at the time; cache moved aside, no effect. Not reproduced in CI so far; to be confirmed there. If CI shows it, investigate for real instead of changing the pool.
+- 2026-11-24: Not done: Google `otpauth-migration://`, Aegis (plain + encrypted), 2FAS importers; the real-app click-through of the import wizard.
+
 ## Next step
-Stage 3: UI import wizard (pick a text file → preview with a per-item decision (defaults prefilled), skipped lines listed → apply → result), reachable from the vault screen; client + fake API + tests. Then close; Google migration, Aegis, 2FAS afterwards.
+Wait for CI. Then next importers on the same interface: Google `otpauth-migration://` (protobuf; QR codes from TASK-0009 already decode to the link text), Aegis plain, Aegis encrypted, 2FAS. Each with invented fixtures only.

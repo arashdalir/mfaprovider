@@ -82,3 +82,13 @@ describe("OpenVault settings", () => {
     expect(await screen.findByText(/GitHub/)).toBeInTheDocument();
   });
 });
+
+describe("OpenVault import", () => {
+  it("opens the import screen and returns to the list", async () => {
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Import" }));
+    expect(await screen.findByRole("region", { name: "Import" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByText(/GitHub/)).toBeInTheDocument();
+  });
+});

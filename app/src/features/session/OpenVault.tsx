@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { AddAccountScreen } from "@/features/entries/AddAccountScreen";
 import { EntryForm } from "@/features/entries/EntryForm";
 import { EntryList } from "@/features/entries/EntryList";
+import { ImportScreen } from "@/features/import/ImportScreen";
 import { SettingsScreen } from "@/features/settings/SettingsScreen";
 import { idleLockSeconds, loadSettings } from "@/features/settings/settings";
 import type { Theme } from "@/features/theme/theme";
@@ -16,6 +17,7 @@ type View =
   | { kind: "list" }
   | { kind: "add" }
   | { kind: "edit"; entry: EntryView }
+  | { kind: "import" }
   | { kind: "settings" };
 
 export function OpenVault({
@@ -37,6 +39,9 @@ export function OpenVault({
     void api.setIdleLock(idleLockSeconds(loadSettings())).catch(() => undefined);
   }, [api]);
 
+  if (view.kind === "import") {
+    return <ImportScreen onClose={backToList} />;
+  }
   if (view.kind === "settings") {
     return <SettingsScreen theme={theme} onThemeChange={onThemeChange} onClose={backToList} />;
   }
@@ -51,6 +56,9 @@ export function OpenVault({
       <div className="flex justify-between gap-2">
         <Button onClick={() => setView({ kind: "add" })}>Add account</Button>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setView({ kind: "import" })}>
+            Import
+          </Button>
           <Button variant="outline" onClick={() => setView({ kind: "settings" })}>
             Settings
           </Button>
