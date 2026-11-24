@@ -26,5 +26,7 @@ Core operations on an unlocked vault (add, edit, delete with tombstone, reorder,
 - 2026-11-17: Task created.
 - 2026-11-24: Wrote ADR-0012 (proposed) for user review. No code yet.
 
+- 2026-11-24: User accepted ADR-0012 as written. Starting core entry operations.
+
 ## Next step
-User reviews ADR-0012. After acceptance: implement the core entry operations (add/edit/delete with tombstone/reorder/tag/search) test-first in `mfa-core`, deciding the reorder representation first; then the shell DTO layer, generated types, typed client and the no-secrets tests.
+Implement the core entry operations (add/edit/delete with tombstone/reorder/tag/search) test-first in `mfa-core`, deciding the reorder representation first; then the shell DTO layer, generated types, typed client and the no-secrets tests.

@@ -1,6 +1,6 @@
 # ADR-0012: Typed IPC between Rust and the UI — `ts-rs` with a hand-written client
 
-- Status: proposed (2026-11-24) — awaiting user review
+- Status: accepted (2026-11-24, by the user, as written)
 - Date: 2026-11-24
 - Related tasks: TASK-0007 (also constrains TASK-0008, TASK-0009, TASK-0010, TASK-0011)
 - Refines: ADR-0002 ("typed IPC client generated from Rust types"; "seeds never enter JavaScript")
