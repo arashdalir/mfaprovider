@@ -1,8 +1,8 @@
 # TASK-0004: Steam Guard OTP type
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-17
-- Updated: 2026-11-18
+- Updated: 2026-11-24
 - Related ADRs: ADR-0006, ADR-0007
 
 ## Goal
@@ -12,7 +12,7 @@ Add Steam Guard (5-character alphabet code derived from TOTP/HMAC-SHA1) as a bui
 - [x] `steam` type registered via `OtpRegistry`, 5-char output over Steam's alphabet, 30 s period
 - [x] Verified against known-answer fixtures (documented source of each vector in the test) — see the caveat in the notes
 - [x] Parameter schema rejects unsupported digits/period/algorithm (schema is empty; every parameter is rejected)
-- [ ] CI green — green locally (31 tests, fmt, clippy); CI run pending the push
+- [x] CI green — run 45366829438 green on all jobs (31 tests)
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: 0003. Steam has no formal RFC; fixtures must come from an independent implementation, recorded in the test file.
@@ -24,5 +24,7 @@ Add Steam Guard (5-character alphabet code derived from TOTP/HMAC-SHA1) as a bui
 - 2026-11-17: Task created.
 - 2026-11-18: Implemented `otp/steam.rs`, registered `steam` as a built-in, 6 new tests; 31 tests green locally, `fmt --check` and `clippy -D warnings` clean.
 
+- 2026-11-24: CI green (run 45366829438). Closed with the vector-provenance caveat still open.
+
 ## Next step
-Push, confirm CI green. Then, if the user can supply a real Steam shared secret + a code observed at a known time (or another implementation's output), add it as a fixture and close the caveat; otherwise close the task with the caveat recorded and move to TASK-0003's closure and TASK-0005.
+None — done, with one open caveat: real-account verification of Steam's conventions. If the user can supply a Steam shared secret plus a code observed at a known time (or another implementation's output for a known secret and time), add it as a fixture in `core/mfa-core/src/otp/steam.rs` and record it here.

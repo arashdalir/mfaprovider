@@ -1,8 +1,8 @@
 # TASK-0003: OTP engine — OtpType trait, registry, HOTP and TOTP
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-17
-- Updated: 2026-11-17
+- Updated: 2026-11-24
 - Related ADRs: ADR-0004, ADR-0006, ADR-0007
 
 ## Goal
@@ -14,7 +14,7 @@ In `mfa-core`, define the `OtpType` interface (id, parameter schema, `generate(s
 - [x] TOTP passes RFC 6238 vectors for SHA-1/256/512
 - [x] Parameters validated by schema: algorithm, digits (6–8), period, counter
 - [x] Secrets held in zeroizing types; no `Debug`/`Display` that prints a secret
-- [ ] `fmt`, `clippy -D warnings`, tests green in CI — green locally (25 tests, `cargo deny` ok); CI run pending the next push
+- [x] `fmt`, `clippy -D warnings`, tests green in CI — run 45366829438 green on all jobs
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: none (first MVP task). Blocks 0004, 0007. "COTP" = HOTP everywhere (ADR-0006).
@@ -31,5 +31,7 @@ In `mfa-core`, define the `OtpType` interface (id, parameter schema, `generate(s
 
 - 2026-11-24: Push delayed because Git Credential Manager showed a "Select an account" dialog; user approved it and the push landed (25d02ba..ca7719a). CI run 45365915092: all build/test jobs green, but "Dependency audit" failed in the second `cargo deny` (app/src-tauri) on two **new shipped-crate advisories**: RUSTSEC-2026-0594 (`cookie` 0.18.2) and RUSTSEC-2026-0592 (`url` 2.5.8). Fixed properly by lockfile patch bumps (`cookie` 0.18.3, `url` 2.5.9, `form_urlencoded` 1.2.3), no ignores added; `cargo deny` ok on both trees, clippy ok, prod `pnpm audit` clean.
 
+- 2026-11-24: CI run 45366829438 for 058f161 green on all jobs, including both `cargo deny` runs and both audit steps. Task complete.
+
 ## Next step
-Push the lockfile fix, confirm the whole CI run is green (including both audit steps), tick the last criterion and move this task and TASK-0004 to `done/`. Then start TASK-0005 (format spec first).
+None — done. Follow-on: TASK-0005 (vault format spec first).
