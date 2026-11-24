@@ -86,6 +86,15 @@ export function SettingsScreen({
           ))}
         </select>
       </div>
+      <div className="flex items-center gap-2">
+        <input
+          id="hide-codes"
+          type="checkbox"
+          checked={settings.hideCodes}
+          onChange={(event) => void update({ ...settings, hideCodes: event.target.checked })}
+        />
+        <Label htmlFor="hide-codes">Hide codes until I press Show</Label>
+      </div>
       <ThemeSwitch theme={theme} onChange={onThemeChange} />
       {problem && (
         <p role="alert" className="text-sm text-destructive">

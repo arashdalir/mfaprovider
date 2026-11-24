@@ -52,6 +52,14 @@ describe("SettingsScreen", () => {
     expect(loadSettings().clipboardClearSeconds).toBe(60);
   });
 
+  it("hides codes by default and remembers turning that off", async () => {
+    open();
+    const box = screen.getByLabelText("Hide codes until I press Show");
+    expect(box).toBeChecked();
+    await userEvent.click(box);
+    expect(loadSettings().hideCodes).toBe(false);
+  });
+
   it("reports when the core refuses a change", async () => {
     open(vi.fn().mockRejectedValue(new IpcCallError({ code: "locked", message: null })));
     await userEvent.selectOptions(screen.getByLabelText("Lock automatically after"), "1");

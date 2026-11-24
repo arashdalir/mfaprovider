@@ -31,6 +31,7 @@ export function EntryList({
 
   const tags = useMemo(() => allTags(entries ?? []), [entries]);
   const shown = useMemo(() => filterEntries(entries ?? [], query, tag), [entries, query, tag]);
+  const hideCodes = loadSettings().hideCodes;
   const filtering = query.trim() !== "" || tag !== null;
 
   async function run(action: () => Promise<unknown>, success?: string) {
@@ -98,6 +99,7 @@ export function EntryList({
               <EntryRow
                 key={entry.id}
                 entry={entry}
+                hideCodes={hideCodes}
                 onCopy={(code) => void run(() => copy(code), "Code copied. It will be cleared shortly.")}
                 onNextCode={() => void run(() => api.advanceCounter(entry.id))}
                 onEdit={() => onEdit(entry)}

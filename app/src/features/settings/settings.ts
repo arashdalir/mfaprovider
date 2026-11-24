@@ -2,12 +2,16 @@ export interface Settings {
   /** Minutes of inactivity before the vault locks; null turns the idle lock off. */
   idleLockMinutes: number | null;
   clipboardClearSeconds: number;
+  /** Codes stay masked until the user presses Show. */
+  hideCodes: boolean;
 }
 
 export const IDLE_LOCK_OPTIONS: (number | null)[] = [1, 5, 15, 30, null];
 export const CLIPBOARD_CLEAR_OPTIONS = [10, 30, 60, 120];
 
-export const DEFAULT_SETTINGS: Settings = { idleLockMinutes: 5, clipboardClearSeconds: 30 };
+export const DEFAULT_SETTINGS: Settings = { idleLockMinutes: 5, clipboardClearSeconds: 30,
+  hideCodes: true,
+};
 
 const STORAGE_KEY = "mfa-settings";
 
@@ -21,6 +25,7 @@ export function parseSettings(raw: unknown): Settings {
     clipboardClearSeconds: CLIPBOARD_CLEAR_OPTIONS.includes(clipboard)
       ? clipboard
       : DEFAULT_SETTINGS.clipboardClearSeconds,
+    hideCodes: typeof candidate.hideCodes === "boolean" ? candidate.hideCodes : DEFAULT_SETTINGS.hideCodes,
   };
 }
 

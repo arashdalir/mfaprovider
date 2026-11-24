@@ -1,6 +1,6 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiContext, type VaultApi } from "@/ipc/api-context";
 import { IpcCallError, type EntryView } from "@/ipc/client";
@@ -56,9 +56,16 @@ function show(
 
 afterEach(() => {
   vi.useRealTimers();
+  window.localStorage.clear();
 });
 
+function showCodesByDefault() {
+  window.localStorage.setItem("mfa-settings", JSON.stringify({ hideCodes: false }));
+}
+
 describe("EntryList", () => {
+  beforeEach(showCodesByDefault);
+
   it("shows each account with a readable code and its time left", async () => {
     show([github, google]);
     expect(await screen.findByRole("button", { name: "Copy code for GitHub · alice" })).toHaveTextContent("482 913");
@@ -196,3 +203,53 @@ describe("EntryList", () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("EntryList with hidden codes (the default)", () => {
+  const maskedRow = () => screen.getByText("GitHub · alice").closest("li") as HTMLElement;
+
+  it("masks every code until Show is pressed, and keeps the countdown", async () => {
+    show([github]);
+    await screen.findByText("GitHub · alice");
+    expect(screen.queryByText(/482/)).not.toBeInTheDocument();
+    expect(within(maskedRow()).getByLabelText("Code hidden")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Time left for GitHub · alice" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show code for GitHub · alice" }));
+    expect(screen.getByRole("button", { name: "Copy code for GitHub · alice" })).toHaveTextContent("482 913");
+    await userEvent.click(screen.getByRole("button", { name: "Hide code for GitHub · alice" }));
+    expect(screen.queryByText(/482/)).not.toBeInTheDocument();
+  });
+
+  it("reveals only the account that was asked for", async () => {
+    show([github, google]);
+    await userEvent.click(await screen.findByRole("button", { name: "Show code for GitHub · alice" }));
+    expect(screen.getByRole("button", { name: "Show code for Google · bob" })).toBeInTheDocument();
+    expect(screen.queryByText(/0715/)).not.toBeInTheDocument();
+  });
+
+  it("copies without revealing", async () => {
+    const { copy } = show([github]);
+    await userEvent.click(await screen.findByRole("button", { name: "Copy code for GitHub · alice" }));
+    expect(copy).toHaveBeenCalledWith("482913");
+    expect(screen.queryByText(/482/)).not.toBeInTheDocument();
+  });
+
+  it("hides a revealed code again after thirty seconds", async () => {
+    vi.useFakeTimers();
+    show([github]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Show code for GitHub · alice" }));
+    expect(screen.getByRole("button", { name: "Copy code for GitHub · alice" })).toHaveTextContent("482 913");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(29_000);
+    });
+    expect(screen.getByRole("button", { name: "Copy code for GitHub · alice" })).toHaveTextContent("482 913");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(screen.queryByText(/482/)).not.toBeInTheDocument();
+  });
+});
+

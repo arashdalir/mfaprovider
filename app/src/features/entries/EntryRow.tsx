@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { EntryView } from "@/ipc/client";
@@ -6,9 +7,24 @@ import type { EntryView } from "@/ipc/client";
 import { formatCode } from "./format";
 
 const LOW_SECONDS = 5;
+export const REVEAL_SECONDS = 30;
+const MASKED_CODE = "••• •••";
+
+/** A revealed code hides itself again after `REVEAL_SECONDS`. */
+function useReveal() {
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (!revealed) return;
+    const timer = window.setTimeout(() => setRevealed(false), REVEAL_SECONDS * 1000);
+    return () => window.clearTimeout(timer);
+  }, [revealed]);
+  return { revealed, show: () => setRevealed(true), hide: () => setRevealed(false) };
+}
 
 export interface EntryRowProps {
   entry: EntryView;
+  /** When true the code stays masked until the user presses Show. */
+  hideCodes: boolean;
   onCopy: (code: string) => void;
   onNextCode: () => void;
   onEdit: () => void;
@@ -19,6 +35,7 @@ export interface EntryRowProps {
 
 export function EntryRow({
   entry,
+  hideCodes,
   onCopy,
   onNextCode,
   onEdit,
@@ -30,7 +47,13 @@ export function EntryRow({
     <li className="flex items-center gap-2 rounded-lg border p-3">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-muted-foreground">{title}</p>
-        <CodeArea entry={entry} title={title} onCopy={onCopy} onNextCode={onNextCode} />
+        <CodeArea
+          entry={entry}
+          title={title}
+          hideCodes={hideCodes}
+          onCopy={onCopy}
+          onNextCode={onNextCode}
+        />
       </div>
       <Button variant="ghost" size="icon" aria-label={`Edit ${title}`} onClick={onEdit}>
         <Pencil />
@@ -62,9 +85,11 @@ export function EntryRow({
 function CodeArea({
   entry,
   title,
+  hideCodes,
   onCopy,
   onNextCode,
-}: Pick<EntryRowProps, "entry" | "onCopy" | "onNextCode"> & { title: string }) {
+}: Pick<EntryRowProps, "entry" | "hideCodes" | "onCopy" | "onNextCode"> & { title: string }) {
+  const { revealed, show, hide } = useReveal();
   const { code } = entry;
   if (code.state === "unsupported") {
     return (
@@ -80,14 +105,40 @@ function CodeArea({
   const period = code.period_seconds;
   return (
     <div className="flex items-center gap-3">
-      <Button
-        variant="ghost"
-        className="font-mono text-2xl tracking-wider"
-        aria-label={`Copy code for ${title}`}
-        onClick={() => onCopy(code.text)}
-      >
-        {formatCode(code.text)}
-      </Button>
+      {hideCodes && !revealed ? (
+        <>
+          <span className="px-2 font-mono text-2xl tracking-wider" aria-label="Code hidden">
+            {MASKED_CODE}
+          </span>
+          <Button variant="outline" size="sm" aria-label={`Show code for ${title}`} onClick={show}>
+            <Eye /> Show
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Copy code for ${title}`}
+            onClick={() => onCopy(code.text)}
+          >
+            <Copy />
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button
+            variant="ghost"
+            className="font-mono text-2xl tracking-wider"
+            aria-label={`Copy code for ${title}`}
+            onClick={() => onCopy(code.text)}
+          >
+            {formatCode(code.text)}
+          </Button>
+          {hideCodes && (
+            <Button variant="ghost" size="icon" aria-label={`Hide code for ${title}`} onClick={hide}>
+              <EyeOff />
+            </Button>
+          )}
+        </>
+      )}
       {remaining !== null && period !== null ? (
         <div
           role="progressbar"

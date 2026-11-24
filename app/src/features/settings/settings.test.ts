@@ -15,10 +15,13 @@ afterEach(() => {
 
 describe("parseSettings", () => {
   it("keeps valid values, including 'never lock'", () => {
-    expect(parseSettings({ idleLockMinutes: 15, clipboardClearSeconds: 60 })).toEqual({
+    expect(parseSettings({ idleLockMinutes: 15, clipboardClearSeconds: 60, hideCodes: false })).toEqual({
       idleLockMinutes: 15,
       clipboardClearSeconds: 60,
+      hideCodes: false,
     });
+    expect(parseSettings({}).hideCodes).toBe(true);
+    expect(parseSettings({ hideCodes: "no" }).hideCodes).toBe(true);
     expect(parseSettings({ idleLockMinutes: null, clipboardClearSeconds: 10 }).idleLockMinutes).toBeNull();
   });
 
@@ -37,8 +40,8 @@ describe("storage", () => {
   });
 
   it("round-trips, including 'never lock'", () => {
-    saveSettings({ idleLockMinutes: null, clipboardClearSeconds: 120 });
-    expect(loadSettings()).toEqual({ idleLockMinutes: null, clipboardClearSeconds: 120 });
+    saveSettings({ idleLockMinutes: null, clipboardClearSeconds: 120, hideCodes: false });
+    expect(loadSettings()).toEqual({ idleLockMinutes: null, clipboardClearSeconds: 120, hideCodes: false });
   });
 
   it("survives corrupt JSON and storage that throws", () => {
@@ -53,7 +56,7 @@ describe("storage", () => {
 
 describe("idleLockSeconds", () => {
   it("converts minutes and keeps 'never'", () => {
-    expect(idleLockSeconds({ idleLockMinutes: 5, clipboardClearSeconds: 30 })).toBe(300);
-    expect(idleLockSeconds({ idleLockMinutes: null, clipboardClearSeconds: 30 })).toBeNull();
+    expect(idleLockSeconds({ ...DEFAULT_SETTINGS, idleLockMinutes: 5 })).toBe(300);
+    expect(idleLockSeconds({ ...DEFAULT_SETTINGS, idleLockMinutes: null })).toBeNull();
   });
 });
