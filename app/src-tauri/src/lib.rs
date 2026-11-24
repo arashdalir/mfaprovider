@@ -49,6 +49,10 @@ pub fn run() {
             commands::draft_from_image,
             commands::add_draft,
             commands::discard_drafts,
+            commands::list_import_formats,
+            commands::import_preview,
+            commands::import_apply,
+            commands::import_discard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

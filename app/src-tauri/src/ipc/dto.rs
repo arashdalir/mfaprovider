@@ -214,6 +214,84 @@ pub fn apply_edits(draft: &NewEntry, edits: DraftEditsRequest) -> NewEntry {
     }
 }
 
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ImportFormatView {
+    pub id: String,
+    pub label: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ImportDecision {
+    Skip,
+    /// Add as a new entry (for duplicates and conflicts: keep both).
+    Add,
+    /// Overwrite the vault entry it matched.
+    Replace,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ImportStatus {
+    New,
+    /// Same name and secret as an entry already in the vault.
+    DuplicateInVault,
+    /// Same name and secret as an earlier item of this file.
+    DuplicateInFile,
+    /// Same name as a vault entry, but a different secret.
+    Conflict,
+    /// Already in the vault under a different name (same key, other issuer or account).
+    AlreadyUnderOtherName,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ImportItemView {
+    pub item_id: u32,
+    /// Line number in the file.
+    pub position: u32,
+    pub otp_type: String,
+    pub issuer: String,
+    pub account: String,
+    pub status: ImportStatus,
+    /// The vault entry or earlier line it matches, by name only.
+    pub matches: Option<String>,
+    pub can_replace: bool,
+    pub default_decision: ImportDecision,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct SkippedItemView {
+    pub position: u32,
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ImportPreview {
+    pub items: Vec<ImportItemView>,
+    pub skipped: Vec<SkippedItemView>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct ImportChoice {
+    pub item_id: u32,
+    pub decision: ImportDecision,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ImportResult {
+    pub added: u32,
+    pub replaced: u32,
+    pub skipped: u32,
+}
+
 pub fn entry_views(data: &VaultData, codes: Vec<EntryCode>) -> Vec<EntryView> {
     data.entries
         .iter()

@@ -22,6 +22,10 @@ const COMMANDS: &[&str] = &[
     "draft_from_image",
     "add_draft",
     "discard_drafts",
+    "list_import_formats",
+    "import_preview",
+    "import_apply",
+    "import_discard",
 ];
 
 fn main() {

@@ -20,6 +20,9 @@ pub enum MergeStatus {
     DuplicateOfEarlierItem(usize),
     /// Same name as an entry in the vault, but a different secret.
     ConflictWithVault(EntryId),
+    /// The same secret as a vault entry that has a different name: most likely the same account
+    /// entered another way (an export without issuers, say).
+    SameSecretUnderOtherName(EntryId),
 }
 
 /// What to do with one incoming account.
@@ -33,12 +36,15 @@ pub enum Decision {
 }
 
 impl Decision {
-    /// New accounts and conflicts are added (nothing is lost either way); duplicates are skipped.
+    /// New accounts and conflicts are added (nothing is lost either way); duplicates, and the
+    /// same secret under another name, are skipped.
     #[must_use]
     pub const fn default_for(status: MergeStatus) -> Self {
         match status {
             MergeStatus::New | MergeStatus::ConflictWithVault(_) => Self::Add,
-            MergeStatus::DuplicateOfVault(_) | MergeStatus::DuplicateOfEarlierItem(_) => Self::Skip,
+            MergeStatus::DuplicateOfVault(_)
+            | MergeStatus::DuplicateOfEarlierItem(_)
+            | MergeStatus::SameSecretUnderOtherName(_) => Self::Skip,
         }
     }
 }
@@ -109,10 +115,16 @@ fn classify(
     if let Some(index) = same_earlier {
         return MergeStatus::DuplicateOfEarlierItem(*index);
     }
-    match vault_matches.and_then(|matches| matches.first()) {
-        Some(index) => MergeStatus::ConflictWithVault(vault.entries[*index].id),
-        None => MergeStatus::New,
+    if let Some(index) = vault_matches.and_then(|matches| matches.first()) {
+        return MergeStatus::ConflictWithVault(vault.entries[*index].id);
     }
+    vault
+        .entries
+        .iter()
+        .find(|entry| entry.secret == item.secret)
+        .map_or(MergeStatus::New, |entry| {
+            MergeStatus::SameSecretUnderOtherName(entry.id)
+        })
 }
 
 /// An incoming account with its status and the user's decision.
@@ -143,7 +155,9 @@ pub fn build_ops(
             }),
             Decision::Replace => {
                 let id = match item.status {
-                    MergeStatus::DuplicateOfVault(id) | MergeStatus::ConflictWithVault(id) => id,
+                    MergeStatus::DuplicateOfVault(id)
+                    | MergeStatus::ConflictWithVault(id)
+                    | MergeStatus::SameSecretUnderOtherName(id) => id,
                     MergeStatus::New | MergeStatus::DuplicateOfEarlierItem(_) => {
                         return Err(MergeError::NothingToReplace(index));
                     }
@@ -223,12 +237,24 @@ mod tests {
     }
 
     #[test]
-    fn the_same_secret_under_a_different_name_is_a_new_account() {
+    fn the_same_secret_under_a_different_name_is_flagged() {
         let plan = plan_merge(
             &vault(&[("A", "a", 1)]),
             &[def("A", "other", 1), def("Z", "a", 1)],
         );
-        assert_eq!(plan, [MergeStatus::New, MergeStatus::New]);
+        assert_eq!(
+            plan,
+            [
+                MergeStatus::SameSecretUnderOtherName(id(1)),
+                MergeStatus::SameSecretUnderOtherName(id(1))
+            ]
+        );
+    }
+
+    #[test]
+    fn a_name_conflict_outranks_a_same_secret_hint() {
+        let plan = plan_merge(&vault(&[("A", "a", 1), ("B", "b", 2)]), &[def("A", "a", 2)]);
+        assert_eq!(plan, [MergeStatus::ConflictWithVault(id(1))]);
     }
 
     #[test]
@@ -296,6 +322,10 @@ mod tests {
         );
         assert_eq!(
             Decision::default_for(MergeStatus::DuplicateOfEarlierItem(0)),
+            Decision::Skip
+        );
+        assert_eq!(
+            Decision::default_for(MergeStatus::SameSecretUnderOtherName(id(1))),
             Decision::Skip
         );
     }

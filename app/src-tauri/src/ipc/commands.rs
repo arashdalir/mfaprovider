@@ -7,8 +7,8 @@ use mfa_storage::FileStorage;
 use tauri::State;
 
 use super::dto::{
-    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView,
-    RevealedSecret, VaultStatus,
+    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, ImportChoice, ImportFormatView,
+    ImportPreview, ImportResult, NewEntryRequest, OtpTypeView, RevealedSecret, VaultStatus,
 };
 use super::error::{IpcError, IpcErrorCode};
 use super::service::VaultService;
@@ -168,5 +168,36 @@ pub async fn add_draft(
 #[tauri::command]
 pub async fn discard_drafts(state: State<'_, AppState>) -> Result<(), IpcError> {
     state.service().discard_drafts();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_import_formats(
+    state: State<'_, AppState>,
+) -> Result<Vec<ImportFormatView>, IpcError> {
+    Ok(state.service().import_formats())
+}
+
+/// `text` is the file's content; nothing in the vault changes until `import_apply`.
+#[tauri::command]
+pub async fn import_preview(
+    state: State<'_, AppState>,
+    format: String,
+    text: String,
+) -> Result<ImportPreview, IpcError> {
+    state.service().import_preview(&format, &text)
+}
+
+#[tauri::command]
+pub async fn import_apply(
+    state: State<'_, AppState>,
+    choices: Vec<ImportChoice>,
+) -> Result<ImportResult, IpcError> {
+    state.service().import_apply(choices)
+}
+
+#[tauri::command]
+pub async fn import_discard(state: State<'_, AppState>) -> Result<(), IpcError> {
+    state.service().import_discard();
     Ok(())
 }

@@ -22,6 +22,10 @@
     "allow-draft-from-link",
     "allow-draft-from-image",
     "allow-add-draft",
-    "allow-discard-drafts"
+    "allow-discard-drafts",
+    "allow-list-import-formats",
+    "allow-import-preview",
+    "allow-import-apply",
+    "allow-import-discard"
   ]
 }

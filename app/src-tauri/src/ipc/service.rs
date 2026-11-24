@@ -9,13 +9,16 @@ use mfa_core::vault::{
     Clock, EntryChanges, KdfParams, LockPolicy, NewEntry, Rng, Storage, SystemEvent, VaultSession,
 };
 
+use mfa_formats::import::{all_importers, importer};
+use mfa_formats::merge::{Decision, MergeStatus, PlannedItem, build_ops, plan_merge};
 use mfa_formats::otpauth::parse_otpauth;
 use mfa_formats::qr::{MAX_FILE_BYTES, decode_qr_image};
 
 use super::dto::{
-    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView,
-    RevealedSecret, VaultStatus, apply_edits, draft_views, entry_views, otp_type_views,
-    parse_entry_id,
+    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, ImportChoice, ImportDecision,
+    ImportFormatView, ImportItemView, ImportPreview, ImportResult, ImportStatus, NewEntryRequest,
+    OtpTypeView, RevealedSecret, SkippedItemView, VaultStatus, apply_edits, draft_views,
+    entry_views, otp_type_views, parse_entry_id,
 };
 use super::error::{IpcError, IpcErrorCode};
 
@@ -24,6 +27,12 @@ pub struct VaultService<S: Storage, C: Clock, R: Rng> {
     registry: OtpRegistry,
     /// Accounts read from links or QR codes, awaiting confirmation. Dropped when the vault locks.
     drafts: Vec<NewEntry>,
+    /// A file read for import, awaiting the user's choices. Dropped when the vault locks.
+    pending_import: Option<PendingImport>,
+}
+
+struct PendingImport {
+    definitions: Vec<NewEntry>,
 }
 
 impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
@@ -32,6 +41,7 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
             session: VaultSession::new(storage, clock, rng, LockPolicy::default()),
             registry: OtpRegistry::with_builtins(),
             drafts: Vec::new(),
+            pending_import: None,
         }
     }
 
@@ -76,6 +86,7 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
     pub fn lock(&mut self) {
         self.session.lock();
         self.drafts.clear();
+        self.pending_import = None;
     }
 
     pub fn notify(&mut self, event: SystemEvent) {
@@ -91,6 +102,7 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
     fn drop_drafts_if_locked(&mut self) {
         if !self.session.is_unlocked() {
             self.drafts.clear();
+            self.pending_import = None;
         }
     }
 
@@ -158,6 +170,141 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
         self.drafts.clear();
     }
 
+    /// The file formats the import screen can offer; needs no unlocked vault.
+    pub fn import_formats(&self) -> Vec<ImportFormatView> {
+        all_importers()
+            .iter()
+            .map(|format| ImportFormatView {
+                id: format.id().to_owned(),
+                label: format.label().to_owned(),
+            })
+            .collect()
+    }
+
+    /// Reads a file's text with the chosen format and says what importing it would do. Nothing
+    /// in the vault changes; the file's accounts wait here (replacing any earlier import).
+    pub fn import_preview(&mut self, format: &str, text: &str) -> Result<ImportPreview, IpcError> {
+        self.require_unlocked()?;
+        let format =
+            importer(format).ok_or_else(|| IpcError::invalid_input("unknown file format"))?;
+        let batch = format
+            .parse(text.as_bytes(), &self.registry)
+            .map_err(|error| IpcError::invalid_input(error.to_string()))?;
+        let skipped = batch
+            .skipped
+            .iter()
+            .map(|item| SkippedItemView {
+                position: saturating_position(item.position),
+                reason: item.reason.clone(),
+            })
+            .collect();
+        let (positions, definitions): (Vec<_>, Vec<_>) = batch
+            .entries
+            .into_iter()
+            .map(|entry| (entry.position, entry.definition))
+            .unzip();
+        let items = self.item_views(&definitions, &positions)?;
+        self.pending_import = Some(PendingImport { definitions });
+        Ok(ImportPreview { items, skipped })
+    }
+
+    fn item_views(
+        &mut self,
+        definitions: &[NewEntry],
+        positions: &[usize],
+    ) -> Result<Vec<ImportItemView>, IpcError> {
+        let data = self.session.data()?;
+        let statuses = plan_merge(data, definitions);
+        let name_of = |id| {
+            data.entry(id)
+                .map(|entry| format!("{} · {}", entry.issuer, entry.account))
+        };
+        Ok(definitions
+            .iter()
+            .zip(positions)
+            .zip(&statuses)
+            .enumerate()
+            .map(|(index, ((definition, position), status))| {
+                let (view_status, matches, can_replace) = match *status {
+                    MergeStatus::New => (ImportStatus::New, None, false),
+                    MergeStatus::DuplicateOfVault(id) => {
+                        (ImportStatus::DuplicateInVault, name_of(id), true)
+                    }
+                    MergeStatus::ConflictWithVault(id) => {
+                        (ImportStatus::Conflict, name_of(id), true)
+                    }
+                    MergeStatus::SameSecretUnderOtherName(id) => {
+                        (ImportStatus::AlreadyUnderOtherName, name_of(id), true)
+                    }
+                    MergeStatus::DuplicateOfEarlierItem(earlier) => (
+                        ImportStatus::DuplicateInFile,
+                        Some(format!("line {}", positions[earlier])),
+                        false,
+                    ),
+                };
+                ImportItemView {
+                    item_id: saturating_position(index),
+                    position: saturating_position(*position),
+                    otp_type: definition.otp_type.clone(),
+                    issuer: definition.issuer.clone(),
+                    account: definition.account.clone(),
+                    status: view_status,
+                    matches,
+                    can_replace,
+                    default_decision: decision_to_view(Decision::default_for(*status)),
+                }
+            })
+            .collect())
+    }
+
+    /// Applies the user's choices to the previewed file as one saved change. Items without a
+    /// choice are skipped. The comparison with the vault is redone first, so a vault that
+    /// changed since the preview is respected. On success the pending file is dropped.
+    pub fn import_apply(&mut self, choices: Vec<ImportChoice>) -> Result<ImportResult, IpcError> {
+        self.require_unlocked()?;
+        let pending = self
+            .pending_import
+            .as_ref()
+            .ok_or(IpcError::new(IpcErrorCode::NotFound))?;
+        let decisions = decisions_by_item(&choices, pending.definitions.len())?;
+        let statuses = plan_merge(self.session.data()?, &pending.definitions);
+        let items: Vec<PlannedItem> = pending
+            .definitions
+            .iter()
+            .zip(statuses)
+            .zip(&decisions)
+            .map(|((definition, status), decision)| PlannedItem {
+                definition: copy_definition(definition),
+                status,
+                decision: *decision,
+            })
+            .collect();
+        let total = items.len();
+        let session = &mut self.session;
+        let ops = build_ops(items, || session.new_entry_id())
+            .map_err(|error| IpcError::invalid_input(error.to_string()))?;
+        let replaced = ops
+            .iter()
+            .filter(|op| matches!(op, mfa_core::vault::ImportOp::Replace { .. }))
+            .count();
+        let added = ops.len() - replaced;
+        let outcome = self.session.import(ops, &self.registry);
+        if outcome.is_ok() || self.session.is_dirty() {
+            // Applied (saved, or in memory awaiting a save): never offer the same file again.
+            self.pending_import = None;
+        }
+        outcome?;
+        Ok(ImportResult {
+            added: saturating_position(added),
+            replaced: saturating_position(replaced),
+            skipped: saturating_position(total - added - replaced),
+        })
+    }
+
+    pub fn import_discard(&mut self) {
+        self.pending_import = None;
+    }
+
     pub fn record_activity(&mut self) {
         self.session.record_activity();
     }
@@ -217,6 +364,60 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
     }
 }
 
+fn saturating_position(value: usize) -> u32 {
+    u32::try_from(value).unwrap_or(u32::MAX)
+}
+
+fn decision_to_view(decision: Decision) -> ImportDecision {
+    match decision {
+        Decision::Skip => ImportDecision::Skip,
+        Decision::Add => ImportDecision::Add,
+        Decision::Replace => ImportDecision::Replace,
+    }
+}
+
+fn decision_from_view(decision: ImportDecision) -> Decision {
+    match decision {
+        ImportDecision::Skip => Decision::Skip,
+        ImportDecision::Add => Decision::Add,
+        ImportDecision::Replace => Decision::Replace,
+    }
+}
+
+/// One decision per item; items without a choice are skipped. Unknown or repeated item ids are
+/// refused rather than guessed at.
+fn decisions_by_item(choices: &[ImportChoice], count: usize) -> Result<Vec<Decision>, IpcError> {
+    let mut decisions = vec![Decision::Skip; count];
+    let mut seen = vec![false; count];
+    for choice in choices {
+        let index = usize::try_from(choice.item_id)
+            .ok()
+            .filter(|index| *index < count)
+            .ok_or_else(|| {
+                IpcError::invalid_input("the choice names an item that is not in the file")
+            })?;
+        if std::mem::replace(&mut seen[index], true) {
+            return Err(IpcError::invalid_input("an item has more than one choice"));
+        }
+        decisions[index] = decision_from_view(choice.decision);
+    }
+    Ok(decisions)
+}
+
+/// A copy whose secret is wiped when it drops, so a refused import does not lose the file.
+fn copy_definition(definition: &NewEntry) -> NewEntry {
+    NewEntry {
+        otp_type: definition.otp_type.clone(),
+        issuer: definition.issuer.clone(),
+        account: definition.account.clone(),
+        secret: mfa_core::secret::Secret::new(definition.secret.as_bytes().to_vec()),
+        params: definition.params.clone(),
+        icon: definition.icon.clone(),
+        tags: definition.tags.clone(),
+        notes: definition.notes.clone(),
+    }
+}
+
 /// Base64 text is about a third longer than the bytes it carries; anything that could not
 /// hold an image within the decoder's file-size limit is refused before decoding.
 fn decode_base64_image(text: &str) -> Result<Vec<u8>, IpcError> {
@@ -259,13 +460,18 @@ mod tests {
         }
     }
 
-    struct CountingRng(u8);
+    /// Deterministic pseudo-random bytes that do not repeat within a test (a plain counter
+    /// wraps after 256 bytes, which made generated entry ids collide).
+    struct CountingRng(u64);
 
     impl Rng for CountingRng {
         fn fill_bytes(&mut self, destination: &mut [u8]) {
             for byte in destination {
-                *byte = self.0;
-                self.0 = self.0.wrapping_add(1);
+                self.0 = self
+                    .0
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                *byte = self.0.to_be_bytes()[0];
             }
         }
     }
@@ -889,5 +1095,453 @@ mod tests {
         service.draft_from_link(&link("alice")).unwrap();
         assert!(service.draft_from_image("garbage!!").is_err());
         assert!(service.add_draft(0, edits("alice")).is_ok());
+    }
+
+    const FORMAT: &str = "otpauth-list";
+    const SECRET_X: &str = "JBSWY3DPEHPK3PXP";
+    const SECRET_Y: &str = "MZXW6YTBOI======";
+
+    fn export(lines: &[(&str, &str)]) -> String {
+        lines
+            .iter()
+            .map(|(name, secret)| {
+                format!("otpauth://totp/{name}?secret={secret}&digits=6&icon=WinAuth\r\n")
+            })
+            .collect()
+    }
+
+    fn choice(item_id: u32, decision: ImportDecision) -> ImportChoice {
+        ImportChoice { item_id, decision }
+    }
+
+    fn accept_defaults(preview: &ImportPreview) -> Vec<ImportChoice> {
+        preview
+            .items
+            .iter()
+            .map(|i| choice(i.item_id, i.default_decision))
+            .collect()
+    }
+
+    fn accounts(service: &mut TestService) -> Vec<String> {
+        service
+            .list_entries()
+            .unwrap()
+            .into_iter()
+            .map(|e| e.account)
+            .collect()
+    }
+
+    #[test]
+    fn the_formats_are_listed_without_needing_the_vault() {
+        let (service, _, _) = service();
+        let formats = service.import_formats();
+        assert_eq!(formats.len(), 1);
+        assert_eq!(formats[0].id, FORMAT);
+    }
+
+    #[test]
+    fn a_preview_lists_the_accounts_and_the_unreadable_lines_and_changes_nothing() {
+        let (mut service, storage, _) = unlocked();
+        let before = storage.bytes();
+        let file = format!(
+            "{}garbage line\r\n",
+            export(&[("one", SECRET_X), ("Acme:two", SECRET_Y)])
+        );
+        let preview = service.import_preview(FORMAT, &file).unwrap();
+        assert_eq!(preview.items.len(), 2);
+        assert_eq!(
+            (
+                preview.items[0].item_id,
+                preview.items[0].position,
+                preview.items[0].account.as_str()
+            ),
+            (0, 1, "one")
+        );
+        assert_eq!(
+            (
+                preview.items[1].issuer.as_str(),
+                preview.items[1].account.as_str()
+            ),
+            ("Acme", "two")
+        );
+        assert!(preview.items.iter().all(|i| i.status == ImportStatus::New
+            && i.default_decision == ImportDecision::Add
+            && !i.can_replace));
+        assert_eq!(preview.skipped.len(), 1);
+        assert_eq!(
+            (
+                preview.skipped[0].position,
+                preview.skipped[0].reason.as_str()
+            ),
+            (3, "this is not an otpauth:// link")
+        );
+        assert_eq!(storage.bytes(), before);
+        assert_eq!(accounts(&mut service).len(), 0);
+    }
+
+    #[test]
+    fn a_preview_never_contains_a_secret() {
+        let (mut service, _, _) = unlocked();
+        let preview = service
+            .import_preview(FORMAT, &export(&[("one", SECRET_X)]))
+            .unwrap();
+        let json = serde_json::to_string(&preview).unwrap();
+        assert!(!json.contains(SECRET_X) && !json.contains("JBSWY3DP"));
+    }
+
+    #[test]
+    fn applying_the_defaults_adds_everything_in_file_order() {
+        let (mut service, _, _) = unlocked();
+        let preview = service
+            .import_preview(
+                FORMAT,
+                &export(&[("a", SECRET_X), ("b", SECRET_Y), ("c", SECRET_X)]),
+            )
+            .unwrap();
+        let result = service.import_apply(accept_defaults(&preview)).unwrap();
+        assert_eq!(
+            result,
+            ImportResult {
+                added: 3,
+                replaced: 0,
+                skipped: 0
+            }
+        );
+        assert_eq!(accounts(&mut service), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn duplicates_are_recognised_against_the_vault_and_inside_the_file() {
+        let (mut service, _, _) = unlocked();
+        service.add_entry(totp_request("a")).unwrap();
+        let file = export(&[
+            ("Example:a", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"),
+            ("x", SECRET_X),
+            ("x", SECRET_X),
+        ]);
+        let preview = service.import_preview(FORMAT, &file).unwrap();
+        let statuses: Vec<_> = preview.items.iter().map(|i| i.status).collect();
+        assert_eq!(
+            statuses,
+            [
+                ImportStatus::DuplicateInVault,
+                ImportStatus::New,
+                ImportStatus::DuplicateInFile
+            ]
+        );
+        assert_eq!(preview.items[0].matches.as_deref(), Some("Example · a"));
+        assert_eq!(preview.items[2].matches.as_deref(), Some("line 2"));
+        assert!(preview.items[0].can_replace && !preview.items[2].can_replace);
+        let result = service.import_apply(accept_defaults(&preview)).unwrap();
+        assert_eq!(
+            result,
+            ImportResult {
+                added: 1,
+                replaced: 0,
+                skipped: 2
+            }
+        );
+        assert_eq!(accounts(&mut service), ["a", "x"]);
+    }
+
+    #[test]
+    fn a_conflict_can_replace_the_existing_entry_or_keep_both() {
+        let (mut service, _, _) = unlocked();
+        let existing = service.add_entry(totp_request("a")).unwrap();
+        let file = export(&[("Example:a", SECRET_X)]);
+
+        let preview = service.import_preview(FORMAT, &file).unwrap();
+        assert_eq!(preview.items[0].status, ImportStatus::Conflict);
+        assert_eq!(preview.items[0].default_decision, ImportDecision::Add);
+        let result = service
+            .import_apply(vec![choice(0, ImportDecision::Replace)])
+            .unwrap();
+        assert_eq!(
+            result,
+            ImportResult {
+                added: 0,
+                replaced: 1,
+                skipped: 0
+            }
+        );
+        assert_eq!(accounts(&mut service), ["a"]);
+        assert_eq!(
+            service
+                .reveal_secret(&existing, PASSWORD)
+                .ok()
+                .unwrap()
+                .secret_base32,
+            SECRET_X
+        );
+
+        let again = service
+            .import_preview(FORMAT, &export(&[("Example:a", SECRET_Y)]))
+            .unwrap();
+        assert_eq!(again.items[0].status, ImportStatus::Conflict);
+        service
+            .import_apply(vec![choice(0, ImportDecision::Add)])
+            .unwrap();
+        assert_eq!(accounts(&mut service), ["a", "a"]);
+    }
+
+    #[test]
+    fn items_without_a_choice_are_skipped_so_a_partial_import_is_possible() {
+        let (mut service, _, _) = unlocked();
+        service
+            .import_preview(
+                FORMAT,
+                &export(&[("a", SECRET_X), ("b", SECRET_Y), ("c", SECRET_X)]),
+            )
+            .unwrap();
+        let result = service
+            .import_apply(vec![
+                choice(1, ImportDecision::Add),
+                choice(2, ImportDecision::Skip),
+            ])
+            .unwrap();
+        assert_eq!(
+            result,
+            ImportResult {
+                added: 1,
+                replaced: 0,
+                skipped: 2
+            }
+        );
+        assert_eq!(accounts(&mut service), ["b"]);
+    }
+
+    #[test]
+    fn nonsense_choices_are_refused_and_the_file_stays_available() {
+        let (mut service, _, _) = unlocked();
+        service
+            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .unwrap();
+        let invalid = IpcErrorCode::InvalidInput;
+        assert_eq!(
+            service
+                .import_apply(vec![choice(5, ImportDecision::Add)])
+                .unwrap_err()
+                .code,
+            invalid
+        );
+        assert_eq!(
+            service
+                .import_apply(vec![
+                    choice(0, ImportDecision::Add),
+                    choice(0, ImportDecision::Skip)
+                ])
+                .unwrap_err()
+                .code,
+            invalid
+        );
+        assert_eq!(
+            service
+                .import_apply(vec![choice(0, ImportDecision::Replace)])
+                .unwrap_err()
+                .code,
+            invalid,
+            "nothing to replace"
+        );
+        assert_eq!(accounts(&mut service).len(), 0);
+        assert!(
+            service
+                .import_apply(vec![choice(0, ImportDecision::Add)])
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn two_items_replacing_one_entry_are_refused_before_anything_changes() {
+        let (mut service, _, _) = unlocked();
+        service.add_entry(totp_request("a")).unwrap();
+        service
+            .import_preview(
+                FORMAT,
+                &export(&[("Example:a", SECRET_X), ("Example:a", SECRET_Y)]),
+            )
+            .unwrap();
+        let error = service
+            .import_apply(vec![
+                choice(0, ImportDecision::Replace),
+                choice(1, ImportDecision::Replace),
+            ])
+            .unwrap_err();
+        assert_eq!(error.code, IpcErrorCode::InvalidInput);
+        assert_eq!(accounts(&mut service), ["a"]);
+    }
+
+    #[test]
+    fn a_file_can_be_applied_only_once() {
+        let (mut service, _, _) = unlocked();
+        let preview = service
+            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .unwrap();
+        service.import_apply(accept_defaults(&preview)).unwrap();
+        assert_eq!(
+            service
+                .import_apply(accept_defaults(&preview))
+                .unwrap_err()
+                .code,
+            IpcErrorCode::NotFound
+        );
+        assert_eq!(accounts(&mut service).len(), 1);
+    }
+
+    #[test]
+    fn a_new_preview_replaces_the_old_one_and_discarding_drops_it() {
+        let (mut service, _, _) = unlocked();
+        service
+            .import_preview(FORMAT, &export(&[("old", SECRET_X)]))
+            .unwrap();
+        service
+            .import_preview(FORMAT, &export(&[("new", SECRET_Y)]))
+            .unwrap();
+        service
+            .import_apply(vec![choice(0, ImportDecision::Add)])
+            .unwrap();
+        assert_eq!(accounts(&mut service), ["new"]);
+        service
+            .import_preview(FORMAT, &export(&[("x", SECRET_X)]))
+            .unwrap();
+        service.import_discard();
+        assert_eq!(
+            service
+                .import_apply(vec![choice(0, ImportDecision::Add)])
+                .unwrap_err()
+                .code,
+            IpcErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn the_pending_file_does_not_survive_locking_or_the_idle_lock() {
+        let (mut service, _, clock) = unlocked();
+        service
+            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .unwrap();
+        service.lock();
+        service.unlock(PASSWORD).unwrap();
+        assert_eq!(
+            service
+                .import_apply(vec![choice(0, ImportDecision::Add)])
+                .unwrap_err()
+                .code,
+            IpcErrorCode::NotFound
+        );
+
+        service
+            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .unwrap();
+        clock.advance_secs(301);
+        service.tick();
+        service.unlock(PASSWORD).unwrap();
+        assert_eq!(
+            service
+                .import_apply(vec![choice(0, ImportDecision::Add)])
+                .unwrap_err()
+                .code,
+            IpcErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn importing_needs_an_unlocked_vault() {
+        let (mut service, _, _) = unlocked();
+        service.lock();
+        assert_eq!(
+            service.import_preview(FORMAT, "x").unwrap_err().code,
+            IpcErrorCode::Locked
+        );
+        assert_eq!(
+            service.import_apply(Vec::new()).unwrap_err().code,
+            IpcErrorCode::Locked
+        );
+    }
+
+    #[test]
+    fn unknown_formats_and_unreadable_files_are_explained() {
+        let (mut service, _, _) = unlocked();
+        assert_eq!(
+            service
+                .import_preview("nonsense", "x")
+                .unwrap_err()
+                .message
+                .as_deref(),
+            Some("unknown file format")
+        );
+        assert_eq!(
+            service
+                .import_preview(FORMAT, "")
+                .unwrap_err()
+                .message
+                .as_deref(),
+            Some("no accounts were found in the file")
+        );
+        let report = service.import_preview(FORMAT, "hello\nworld\n").unwrap();
+        assert_eq!((report.items.len(), report.skipped.len()), (0, 2));
+    }
+
+    #[test]
+    fn a_save_failure_surfaces_and_the_file_is_not_offered_again() {
+        let (mut service, storage, _) = unlocked();
+        let preview = service
+            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .unwrap();
+        storage.set_failing(true);
+        assert_eq!(
+            service
+                .import_apply(accept_defaults(&preview))
+                .unwrap_err()
+                .code,
+            IpcErrorCode::StorageFailed
+        );
+        storage.set_failing(false);
+        assert_eq!(
+            service
+                .import_apply(accept_defaults(&preview))
+                .unwrap_err()
+                .code,
+            IpcErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn an_import_of_many_accounts_is_one_saved_step() {
+        let (mut service, storage, _) = unlocked();
+        let lines: Vec<(String, String)> = (0..58)
+            .map(|n| (format!("acct{n}"), SECRET_X.to_owned()))
+            .collect();
+        let borrowed: Vec<(&str, &str)> = lines
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let preview = service.import_preview(FORMAT, &export(&borrowed)).unwrap();
+        let before = storage.bytes();
+        service.import_apply(accept_defaults(&preview)).unwrap();
+        assert_ne!(storage.bytes(), before);
+        assert_eq!(accounts(&mut service).len(), 58);
+    }
+
+    #[test]
+    fn an_account_under_another_name_is_flagged_skipped_by_default_and_replaceable() {
+        let (mut service, _, _) = unlocked();
+        let existing = service.add_entry(totp_request("a")).unwrap();
+        let file = export(&[("renamed", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")]);
+        let preview = service.import_preview(FORMAT, &file).unwrap();
+        let item = &preview.items[0];
+        assert_eq!(item.status, ImportStatus::AlreadyUnderOtherName);
+        assert_eq!(item.matches.as_deref(), Some("Example · a"));
+        assert!(item.can_replace);
+        assert_eq!(item.default_decision, ImportDecision::Skip);
+
+        service
+            .import_apply(vec![choice(0, ImportDecision::Replace)])
+            .unwrap();
+        let entries = service.list_entries().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            (entries[0].id.as_str(), entries[0].account.as_str()),
+            (existing.as_str(), "renamed")
+        );
     }
 }
