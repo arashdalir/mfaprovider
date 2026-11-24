@@ -12,4 +12,5 @@
 | [0008](0008-sync.md) | Sync via user-selected cloud file | accepted |
 | [0009](0009-license.md) | Open-source licence (AGPL-3.0-or-later) | accepted |
 | [0011](0011-vault-file-format-v1.md) | Vault file format v1 (layout, key slot, payload, bounds) | accepted |
+| [0012](0012-ipc-type-generation.md) | Typed IPC: `ts-rs` DTOs + hand-written client (not `tauri-specta`, still rc) | proposed |
 | [0010](0010-self-hosted-server-mode.md) | Self-hosted server mode (web access to codes); supersedes ADR-0006's "no server" non-goal | proposed |
