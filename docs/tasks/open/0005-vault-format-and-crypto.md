@@ -1,8 +1,8 @@
 # TASK-0005: Vault data model, file format and crypto
 
-- Status: open
+- Status: in-progress
 - Created: 2026-11-17
-- Updated: 2026-11-17
+- Updated: 2026-11-24
 - Related ADRs: ADR-0003, ADR-0004
 
 ## Goal
@@ -20,8 +20,11 @@ Implement the entry model and the encrypted, versioned vault file in `mfa-core`:
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: none (parallel to 0003). Blocks 0006. Crate choices (argon2, chacha20poly1305, zeroize) must pass `cargo deny`; record any new ADR-worthy choice (e.g. wrap format) as an ADR before coding it.
 
+- 2026-11-24: Format decisions are recorded in ADR-0011 (proposed) with the normative byte layout in `docs/specs/vault-format-v1.md`. Planned crates (each must pass `cargo deny`): `argon2`, `chacha20poly1305`, `ciborium`, `unicode-normalization`, plus existing `zeroize`/`thiserror`; an `Rng` trait is injected (production: OS randomness via `getrandom`, in the Tauri shell, not the core).
+
 ## Progress log (append-only, dated)
 - 2026-11-17: Task created.
+- 2026-11-24: Wrote ADR-0011 and `docs/specs/vault-format-v1.md` for user review. No code yet.
 
 ## Next step
-Draft the vault file format spec (header layout, versioning, wrapped-key structure) in `docs/` and review it with the user before implementing.
+User reviews ADR-0011 / the spec. After acceptance: implement test-first — entry/tombstone model and CBOR payload (with unknown-field preservation), then the container (seal/open, bounds, error types), then Argon2 parameter tuning, then the golden vector; commit after each green step.
