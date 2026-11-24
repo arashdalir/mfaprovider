@@ -27,6 +27,8 @@ Core operations on an unlocked vault (add, edit, delete with tombstone, reorder,
 - 2026-11-24: Wrote ADR-0012 (proposed) for user review. No code yet.
 
 - 2026-11-24: User accepted ADR-0012 as written. Starting core entry operations.
+- 2026-11-24: Decided: entry order = list order of `VaultData.entries` (as ADR-0011 already specifies; no sort key, no new ADR). `OtpType` cannot change on an existing entry (delete + add). Entries of unsupported types: metadata editable, params not. Search covers issuer, account and tags only (not notes). Pure ops live in `vault/entries.rs` (16 tests); clippy and all 131 workspace tests green locally.
+- 2026-11-24: Done: core add/edit/delete(tombstone)/move/search/tags on `VaultData`. Remaining in core: session wrappers that save only on success, live codes with remaining seconds (needs a period accessor on `OtpType`), HOTP counter advance.
 
 ## Next step
-Implement the core entry operations (add/edit/delete with tombstone/reorder/tag/search) test-first in `mfa-core`, deciding the reorder representation first; then the shell DTO layer, generated types, typed client and the no-secrets tests.
+Session wrappers (no save on error), live codes + remaining seconds, HOTP counter advance, all test-first in `mfa-core`; then the shell DTO layer, generated types, typed client and the no-secrets tests.

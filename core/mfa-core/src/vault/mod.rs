@@ -2,6 +2,7 @@
 
 mod clock;
 mod container;
+mod entries;
 mod error;
 mod kdf;
 mod model;
@@ -14,6 +15,7 @@ mod test_support;
 
 pub use clock::Clock;
 pub use container::{create, open, OpenedVault};
+pub use entries::{EntryChanges, EntryError, NewEntry};
 pub use error::VaultError;
 pub use kdf::{tune_kdf_params, KdfParams};
 pub use model::{Entry, EntryId, Extra, Tombstone, VaultData};
