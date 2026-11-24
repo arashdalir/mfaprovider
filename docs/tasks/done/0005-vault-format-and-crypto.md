@@ -1,6 +1,6 @@
 # TASK-0005: Vault data model, file format and crypto
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-17
 - Updated: 2026-11-24
 - Related ADRs: ADR-0003, ADR-0004
@@ -16,7 +16,7 @@ Implement the entry model and the encrypted, versioned vault file in `mfa-core`:
 - [x] Encrypt/decrypt round-trip, tamper detection (header and body), wrong-password failure, versioned-format test fixtures
 - [x] Vault key and derived keys zeroized on drop (`Zeroizing`); see the zeroization limits in the notes
 - [x] Binary format documented in `docs/` (spec file), with a golden test vector (`core/mfa-core/tests/golden/vault-v1.bin`)
-- [ ] CI green (local: 77 tests, fmt, clippy `-D warnings`, `cargo deny` all pass; CI run pending the push)
+- [x] CI green — run 45381759532 green on all jobs (core and UI on Ubuntu and Windows, both `cargo deny` runs, both audit steps)
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: none (parallel to 0003). Blocks 0006. Crate choices (argon2, chacha20poly1305, zeroize) must pass `cargo deny`; record any new ADR-worthy choice (e.g. wrap format) as an ADR before coding it.
@@ -35,5 +35,7 @@ Implement the entry model and the encrypted, versioned vault file in `mfa-core`:
 - `OpenedVault::rewrap` trusts that `file` is the file the vault was opened from/saved to; it validates the layout but does not check the body decrypts under the key.
 - Known open points carried to later tasks: entry reordering representation (TASK-0007); a production `Rng` backed by OS randomness and a real timing closure for `tune_kdf_params` belong in the Tauri shell (TASK-0007/0006).
 
+- 2026-11-24: CI run 45381759532 for 9b0314a green on all jobs. Task complete.
+
 ## Next step
-Push, confirm CI is green on all jobs, tick the CI criterion and move this task to `done/`. Then TASK-0006 (vault lifecycle: storage trait, auto-lock, atomic save) builds on `create`/`open`/`save`/`rewrap`.
+None — done. TASK-0006 (vault lifecycle: storage trait, auto-lock, atomic save) builds on `create`/`open`/`save`/`rewrap`.
