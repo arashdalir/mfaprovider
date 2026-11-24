@@ -19,6 +19,9 @@ ADR-0003 fixed the primitives (random vault key wrapped by an Argon2id-derived k
 8. **Injection**: randomness (salt, nonces, vault key) comes from an injected RNG trait, so the core stays I/O-free and tests can use fixed values for a golden vector.
 9. **Reuse**: the encrypted export file (TASK-0011) uses the same container with a different magic (`MFAEXPRT`) and its own independent password.
 
+## What the file reveals
+The password, in any form (plain, normalised or hashed), is never stored. Normalisation happens in memory before key derivation, then the password and derived key are wiped. The header holds only public values: magic, version, algorithm ids, Argon2 settings, salt, nonces and the encrypted vault key. There is no password hash or check value. Someone holding the file can only guess passwords offline, each guess costing a full Argon2id run, and a guess is confirmed only when it decrypts the wrapped vault key. Security therefore rests on the strength of the master password and the Argon2 cost; the salt prevents reuse of precomputed work across vaults, and the authenticated header prevents lowering the cost.
+
 ## Options considered
 - **Payload as JSON** instead of CBOR: easier to eyeball, but secrets need text encoding and are harder to keep out of long-lived strings. Rejected.
 - **Rewrite the whole file on password change** (header bound to body): simpler AAD, but re-encrypts every entry and makes TASK-0006's cheap re-wrap impossible. Rejected.
