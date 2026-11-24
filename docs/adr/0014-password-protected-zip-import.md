@@ -1,6 +1,6 @@
 # ADR-0014: Password-protected ZIP import — the `zip` crate, minimal features, hard limits
 
-- Status: proposed
+- Status: accepted (2026-11-24, by the user, as written)
 - Date: 2026-11-24
 - Related tasks: TASK-0014 (also TASK-0010 importers)
 - Refines: ADR-0004 (import sources), ADR-0002 ("seeds never enter JavaScript")

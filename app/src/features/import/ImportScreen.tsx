@@ -1,13 +1,16 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { fileToBase64 } from "@/features/entries/file-to-base64";
 import { useApi } from "@/ipc/api-context";
 import type { ImportFormatView, ImportPreview, ImportResult } from "@/ipc/client";
-import { describeError } from "@/ipc/error-message";
+import { describeError, isPasswordRequired } from "@/ipc/error-message";
 
 import { ImportPreviewStep } from "./ImportPreviewStep";
-import { readTextFile } from "./read-text-file";
+
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
 type Step =
   | { kind: "pick" }
@@ -22,6 +25,8 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
   const [format, setFormat] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [locked, setLocked] = useState<File | null>(null);
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -45,15 +50,33 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
     if (!file) {
       return;
     }
+    setLocked(null);
+    setPassword("");
+    await open(file, null);
+  }
+
+  async function open(file: File, archivePassword: string | null) {
     setBusy(true);
     setProblem(null);
     try {
-      const text = await readTextFile(file);
-      setStep({ kind: "preview", preview: await api.importPreview(format, text) });
+      const content = await fileToBase64(file, MAX_IMPORT_FILE_BYTES);
+      setStep({ kind: "preview", preview: await api.importPreview(format, content, archivePassword) });
+      setLocked(null);
+      setPassword("");
     } catch (error) {
+      if (isPasswordRequired(error)) {
+        setLocked(file);
+      }
       setProblem(error instanceof RangeError ? error.message : describeError(error));
     } finally {
       setBusy(false);
+    }
+  }
+
+  function submitPassword(event: FormEvent) {
+    event.preventDefault();
+    if (locked !== null) {
+      void open(locked, password);
     }
   }
 
@@ -108,7 +131,7 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
         <input
           id="import-file"
           type="file"
-          accept=".txt,text/plain"
+          accept=".txt,.zip,text/plain,application/zip"
           disabled={busy || format === ""}
           onChange={(event) => void choose(event)}
         />
@@ -117,6 +140,21 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
           it once you are done.
         </p>
       </div>
+      {locked !== null && (
+        <form className="flex flex-col gap-2" onSubmit={submitPassword}>
+          <Label htmlFor="archive-password">Password of the ZIP file</Label>
+          <Input
+            id="archive-password"
+            type="password"
+            autoComplete="off"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <Button type="submit" className="self-start" disabled={busy || password === ""}>
+            Open file
+          </Button>
+        </form>
+      )}
       {busy && <p role="status">Reading the file…</p>}
       {problem && (
         <p role="alert" className="text-sm text-destructive">

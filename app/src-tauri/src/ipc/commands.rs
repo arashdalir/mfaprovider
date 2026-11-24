@@ -5,13 +5,14 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use mfa_storage::FileStorage;
 use tauri::State;
+use zeroize::Zeroizing;
 
 use super::dto::{
     DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, ImportChoice, ImportFormatView,
     ImportPreview, ImportResult, NewEntryRequest, OtpTypeView, RevealedSecret, VaultStatus,
 };
 use super::error::{IpcError, IpcErrorCode};
-use super::service::VaultService;
+use super::service::{VaultService, decode_base64_file};
 use crate::platform::{OsRng, SystemClock, tuned_kdf_params};
 
 pub type Service = VaultService<FileStorage, SystemClock, OsRng>;
@@ -178,14 +179,18 @@ pub async fn list_import_formats(
     Ok(state.service().import_formats())
 }
 
-/// `text` is the file's content; nothing in the vault changes until `import_apply`.
+/// `file` is the file's bytes as base64: a text export or a ZIP archive, which needs `password`.
+/// Nothing in the vault changes until `import_apply`.
 #[tauri::command]
 pub async fn import_preview(
     state: State<'_, AppState>,
     format: String,
-    text: String,
+    file: String,
+    password: Option<String>,
 ) -> Result<ImportPreview, IpcError> {
-    state.service().import_preview(&format, &text)
+    let password = Zeroizing::new(password.unwrap_or_default());
+    let bytes = Zeroizing::new(decode_base64_file(&file)?);
+    state.service().import_preview(&format, &bytes, &password)
 }
 
 #[tauri::command]

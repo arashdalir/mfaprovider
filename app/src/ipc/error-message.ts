@@ -5,6 +5,7 @@ const MESSAGES: Record<IpcErrorCode, string> = {
   no_vault: "There is no vault yet.",
   already_exists: "A vault already exists.",
   wrong_password: "Wrong password.",
+  password_required: "This file needs a password.",
   not_found: "That account no longer exists.",
   invalid_input: "Some of the input is not valid.",
   unsupported: "This account type is not supported by this version.",
@@ -24,4 +25,8 @@ export function describeError(error: unknown): string {
 
 export function isLockedError(error: unknown): boolean {
   return error instanceof IpcCallError && error.code === "locked";
+}
+
+export function isPasswordRequired(error: unknown): boolean {
+  return error instanceof IpcCallError && error.code === "password_required";
 }

@@ -2,10 +2,10 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const CHUNK = 0x8000;
 
-/** The file's bytes as base64, for handing an image to the core. Refuses files over 10 MiB. */
-export async function fileToBase64(file: File): Promise<string> {
-  if (file.size > MAX_IMAGE_BYTES) {
-    throw new RangeError("The file is larger than 10 MiB.");
+/** The file's bytes as base64, for handing it to the core. Refuses files over `maxBytes`. */
+export async function fileToBase64(file: File, maxBytes = MAX_IMAGE_BYTES): Promise<string> {
+  if (file.size > maxBytes) {
+    throw new RangeError(`The file is larger than ${maxBytes / (1024 * 1024)} MiB.`);
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = "";

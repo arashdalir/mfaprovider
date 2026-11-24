@@ -45,13 +45,17 @@ async function pick(file = exportFile()) {
 }
 
 describe("choosing the file", () => {
-  it("offers the formats and reads the chosen file as text", async () => {
+  it("offers the formats and sends the chosen file to the core as base64", async () => {
     const { api } = open({
       importPreview: vi.fn().mockResolvedValue(preview([item({ item_id: 0 })])),
     });
     expect(await screen.findByRole("option", { name: /otpauth/ })).toBeInTheDocument();
     await pick(exportFile("line one\r\nline two"));
-    expect(api.importPreview).toHaveBeenCalledWith("otpauth-list", "line one\r\nline two");
+    expect(api.importPreview).toHaveBeenCalledWith(
+      "otpauth-list",
+      btoa("line one\r\nline two"),
+      null,
+    );
     expect(await screen.findByRole("region", { name: "Import preview" })).toBeInTheDocument();
   });
 
@@ -66,10 +70,10 @@ describe("choosing the file", () => {
     expect(screen.getByLabelText("Choose the export file")).toBeEnabled();
   });
 
-  it("refuses unreadable files without calling the core", async () => {
+  it("refuses files over 5 MiB without calling the core", async () => {
     const { api } = open();
-    await pick(new File([new Uint8Array([0xc3, 0x28])], "binary.txt"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("not readable text");
+    await pick(new File([new Uint8Array(5 * 1024 * 1024 + 1)], "huge.txt"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("larger than 5 MiB");
     expect(api.importPreview).not.toHaveBeenCalled();
   });
 
@@ -77,6 +81,56 @@ describe("choosing the file", () => {
     const { onClose } = open();
     await userEvent.click(await screen.findByRole("button", { name: "Back" }));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("a password-protected archive", () => {
+  const needsPassword = () => new IpcCallError({ code: "password_required", message: null });
+  const wrongPassword = () =>
+    new IpcCallError({ code: "invalid_input", message: "wrong password, or the file is damaged" });
+  const zip = () => new File([new Uint8Array([0x50, 0x4b, 3, 4])], "export.zip");
+
+  it("asks for the password, then opens the file with it", async () => {
+    const importPreview = vi
+      .fn()
+      .mockRejectedValueOnce(needsPassword())
+      .mockResolvedValue(preview([item({ item_id: 0 })]));
+    open({ importPreview });
+    await pick(zip());
+    expect(await screen.findByRole("alert")).toHaveTextContent("This file needs a password.");
+    await userEvent.type(screen.getByLabelText("Password of the ZIP file"), "hunter2");
+    await userEvent.click(screen.getByRole("button", { name: "Open file" }));
+    expect(importPreview).toHaveBeenLastCalledWith("otpauth-list", expect.any(String), "hunter2");
+    expect(await screen.findByRole("region", { name: "Import preview" })).toBeInTheDocument();
+  });
+
+  it("keeps asking after a wrong password, with the reason", async () => {
+    const importPreview = vi
+      .fn()
+      .mockRejectedValueOnce(needsPassword())
+      .mockRejectedValue(wrongPassword());
+    open({ importPreview });
+    await pick(zip());
+    await userEvent.type(await screen.findByLabelText("Password of the ZIP file"), "nope{enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("wrong password, or the file is damaged");
+    expect(screen.getByLabelText("Password of the ZIP file")).toBeEnabled();
+  });
+
+  it("does not offer to open the file before a password is typed", async () => {
+    open({ importPreview: vi.fn().mockRejectedValue(needsPassword()) });
+    await pick(zip());
+    await screen.findByLabelText("Password of the ZIP file");
+    expect(screen.getByRole("button", { name: "Open file" })).toBeDisabled();
+  });
+
+  it("forgets the password and the file when another file is chosen", async () => {
+    const importPreview = vi.fn().mockRejectedValueOnce(needsPassword()).mockResolvedValue(preview([]));
+    open({ importPreview });
+    await pick(zip());
+    await screen.findByLabelText("Password of the ZIP file");
+    await pick(exportFile());
+    expect(screen.queryByLabelText("Password of the ZIP file")).not.toBeInTheDocument();
+    expect(importPreview).toHaveBeenLastCalledWith("otpauth-list", expect.any(String), null);
   });
 });
 

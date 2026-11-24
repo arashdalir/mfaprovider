@@ -94,9 +94,12 @@ export const ipc = {
   addDraft: (id: number, edits: DraftEditsRequest) => call<string>("add_draft", { id, edits }),
   discardDrafts: () => call<void>("discard_drafts"),
   listImportFormats: () => call<ImportFormatView[]>("list_import_formats"),
-  /** `text` is the file's content; nothing in the vault changes until `importApply`. */
-  importPreview: (format: string, text: string) =>
-    call<ImportPreview>("import_preview", { format, text }),
+  /**
+   * `file` is a text export or a ZIP archive as base64; an archive needs its `password`.
+   * Nothing in the vault changes until `importApply`.
+   */
+  importPreview: (format: string, file: string, password: string | null = null) =>
+    call<ImportPreview>("import_preview", { format, file, password }),
   importApply: (choices: ImportChoice[]) => call<ImportResult>("import_apply", { choices }),
   importDiscard: () => call<void>("import_discard"),
 };

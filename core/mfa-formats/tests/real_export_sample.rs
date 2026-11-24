@@ -28,3 +28,22 @@ fn a_real_link_list_export_imports_cleanly() {
     assert_eq!(skipped, 0, "every line should be usable");
     assert_eq!(new, definitions.len());
 }
+
+/// `MFA_SAMPLE_ZIP=path/to/export.zip MFA_SAMPLE_ZIP_PASSWORD=... cargo test -p mfa-formats --test real_export_sample -- --ignored --nocapture`
+#[test]
+#[ignore = "needs MFA_SAMPLE_ZIP and MFA_SAMPLE_ZIP_PASSWORD for a real password-protected export"]
+fn a_real_password_protected_archive_imports_cleanly() {
+    let path = std::env::var("MFA_SAMPLE_ZIP").expect("set MFA_SAMPLE_ZIP");
+    let password = std::env::var("MFA_SAMPLE_ZIP_PASSWORD").expect("set MFA_SAMPLE_ZIP_PASSWORD");
+    let archive = std::fs::read(path).unwrap();
+    let content = mfa_formats::archive::read_single_file(&archive, password.as_bytes()).unwrap();
+    let batch = LinkListImporter
+        .parse(&content, &OtpRegistry::with_builtins())
+        .unwrap();
+    println!(
+        "accounts read: {}, skipped lines: {}",
+        batch.entries.len(),
+        batch.skipped.len()
+    );
+    assert_eq!(batch.skipped.len(), 0);
+}

@@ -8,8 +8,10 @@ use mfa_core::otp::OtpRegistry;
 use mfa_core::vault::{
     Clock, EntryChanges, KdfParams, LockPolicy, NewEntry, Rng, Storage, SystemEvent, VaultSession,
 };
+use zeroize::Zeroizing;
 
-use mfa_formats::import::{all_importers, importer};
+use mfa_formats::archive::{is_zip, read_single_file};
+use mfa_formats::import::{MAX_IMPORT_BYTES, all_importers, importer};
 use mfa_formats::merge::{Decision, MergeStatus, PlannedItem, build_ops, plan_merge};
 use mfa_formats::otpauth::parse_otpauth;
 use mfa_formats::qr::{MAX_FILE_BYTES, decode_qr_image};
@@ -183,12 +185,18 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
 
     /// Reads a file's text with the chosen format and says what importing it would do. Nothing
     /// in the vault changes; the file's accounts wait here (replacing any earlier import).
-    pub fn import_preview(&mut self, format: &str, text: &str) -> Result<ImportPreview, IpcError> {
+    pub fn import_preview(
+        &mut self,
+        format: &str,
+        file: &[u8],
+        password: &str,
+    ) -> Result<ImportPreview, IpcError> {
         self.require_unlocked()?;
         let format =
             importer(format).ok_or_else(|| IpcError::invalid_input("unknown file format"))?;
+        let content = file_content(file, password)?;
         let batch = format
-            .parse(text.as_bytes(), &self.registry)
+            .parse(&content, &self.registry)
             .map_err(|error| IpcError::invalid_input(error.to_string()))?;
         let skipped = batch
             .skipped
@@ -418,15 +426,52 @@ fn copy_definition(definition: &NewEntry) -> NewEntry {
     }
 }
 
+/// The bytes an importer reads: the file itself, or the one file inside a ZIP archive (opened
+/// with `password`, which is used here and nowhere else). Archives are recognised by content.
+fn file_content(file: &[u8], password: &str) -> Result<Zeroizing<Vec<u8>>, IpcError> {
+    if is_zip(file) {
+        Ok(read_single_file(file, password.as_bytes())?)
+    } else {
+        Ok(Zeroizing::new(file.to_vec()))
+    }
+}
+
 /// Base64 text is about a third longer than the bytes it carries; anything that could not
 /// hold an image within the decoder's file-size limit is refused before decoding.
 fn decode_base64_image(text: &str) -> Result<Vec<u8>, IpcError> {
-    if text.len() > MAX_FILE_BYTES / 3 * 4 + 8 {
-        return Err(IpcError::invalid_input("the file is larger than 10 MiB"));
+    decode_base64_within(
+        text,
+        MAX_FILE_BYTES,
+        (
+            "the file is larger than 10 MiB",
+            "the image could not be read",
+        ),
+    )
+}
+
+/// An import file (a text export or a ZIP archive) sent as base64.
+pub(super) fn decode_base64_file(text: &str) -> Result<Vec<u8>, IpcError> {
+    decode_base64_within(
+        text,
+        MAX_IMPORT_BYTES,
+        (
+            "the file is larger than 5 MiB",
+            "the file could not be read",
+        ),
+    )
+}
+
+fn decode_base64_within(
+    text: &str,
+    max_bytes: usize,
+    (too_large, unreadable): (&'static str, &'static str),
+) -> Result<Vec<u8>, IpcError> {
+    if text.len() > max_bytes / 3 * 4 + 8 {
+        return Err(IpcError::invalid_input(too_large));
     }
     STANDARD
         .decode(text.trim())
-        .map_err(|_| IpcError::invalid_input("the image could not be read"))
+        .map_err(|_| IpcError::invalid_input(unreadable))
 }
 
 #[cfg(test)]
@@ -437,6 +482,12 @@ mod tests {
     use mfa_core::vault::MemoryStorage;
 
     use super::*;
+
+    impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
+        fn preview_text(&mut self, format: &str, text: &str) -> Result<ImportPreview, IpcError> {
+            self.import_preview(format, text.as_bytes(), "")
+        }
+    }
     use crate::ipc::dto::CodeState;
 
     const PASSWORD: &str = "correct horse battery staple";
@@ -1147,7 +1198,7 @@ mod tests {
             "{}garbage line\r\n",
             export(&[("one", SECRET_X), ("Acme:two", SECRET_Y)])
         );
-        let preview = service.import_preview(FORMAT, &file).unwrap();
+        let preview = service.preview_text(FORMAT, &file).unwrap();
         assert_eq!(preview.items.len(), 2);
         assert_eq!(
             (
@@ -1183,7 +1234,7 @@ mod tests {
     fn a_preview_never_contains_a_secret() {
         let (mut service, _, _) = unlocked();
         let preview = service
-            .import_preview(FORMAT, &export(&[("one", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("one", SECRET_X)]))
             .unwrap();
         let json = serde_json::to_string(&preview).unwrap();
         assert!(!json.contains(SECRET_X) && !json.contains("JBSWY3DP"));
@@ -1193,7 +1244,7 @@ mod tests {
     fn applying_the_defaults_adds_everything_in_file_order() {
         let (mut service, _, _) = unlocked();
         let preview = service
-            .import_preview(
+            .preview_text(
                 FORMAT,
                 &export(&[("a", SECRET_X), ("b", SECRET_Y), ("c", SECRET_X)]),
             )
@@ -1219,7 +1270,7 @@ mod tests {
             ("x", SECRET_X),
             ("x", SECRET_X),
         ]);
-        let preview = service.import_preview(FORMAT, &file).unwrap();
+        let preview = service.preview_text(FORMAT, &file).unwrap();
         let statuses: Vec<_> = preview.items.iter().map(|i| i.status).collect();
         assert_eq!(
             statuses,
@@ -1250,7 +1301,7 @@ mod tests {
         let existing = service.add_entry(totp_request("a")).unwrap();
         let file = export(&[("Example:a", SECRET_X)]);
 
-        let preview = service.import_preview(FORMAT, &file).unwrap();
+        let preview = service.preview_text(FORMAT, &file).unwrap();
         assert_eq!(preview.items[0].status, ImportStatus::Conflict);
         assert_eq!(preview.items[0].default_decision, ImportDecision::Add);
         let result = service
@@ -1275,7 +1326,7 @@ mod tests {
         );
 
         let again = service
-            .import_preview(FORMAT, &export(&[("Example:a", SECRET_Y)]))
+            .preview_text(FORMAT, &export(&[("Example:a", SECRET_Y)]))
             .unwrap();
         assert_eq!(again.items[0].status, ImportStatus::Conflict);
         service
@@ -1288,7 +1339,7 @@ mod tests {
     fn items_without_a_choice_are_skipped_so_a_partial_import_is_possible() {
         let (mut service, _, _) = unlocked();
         service
-            .import_preview(
+            .preview_text(
                 FORMAT,
                 &export(&[("a", SECRET_X), ("b", SECRET_Y), ("c", SECRET_X)]),
             )
@@ -1314,7 +1365,7 @@ mod tests {
     fn nonsense_choices_are_refused_and_the_file_stays_available() {
         let (mut service, _, _) = unlocked();
         service
-            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("a", SECRET_X)]))
             .unwrap();
         let invalid = IpcErrorCode::InvalidInput;
         assert_eq!(
@@ -1355,7 +1406,7 @@ mod tests {
         let (mut service, _, _) = unlocked();
         service.add_entry(totp_request("a")).unwrap();
         service
-            .import_preview(
+            .preview_text(
                 FORMAT,
                 &export(&[("Example:a", SECRET_X), ("Example:a", SECRET_Y)]),
             )
@@ -1374,7 +1425,7 @@ mod tests {
     fn a_file_can_be_applied_only_once() {
         let (mut service, _, _) = unlocked();
         let preview = service
-            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("a", SECRET_X)]))
             .unwrap();
         service.import_apply(accept_defaults(&preview)).unwrap();
         assert_eq!(
@@ -1391,17 +1442,17 @@ mod tests {
     fn a_new_preview_replaces_the_old_one_and_discarding_drops_it() {
         let (mut service, _, _) = unlocked();
         service
-            .import_preview(FORMAT, &export(&[("old", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("old", SECRET_X)]))
             .unwrap();
         service
-            .import_preview(FORMAT, &export(&[("new", SECRET_Y)]))
+            .preview_text(FORMAT, &export(&[("new", SECRET_Y)]))
             .unwrap();
         service
             .import_apply(vec![choice(0, ImportDecision::Add)])
             .unwrap();
         assert_eq!(accounts(&mut service), ["new"]);
         service
-            .import_preview(FORMAT, &export(&[("x", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("x", SECRET_X)]))
             .unwrap();
         service.import_discard();
         assert_eq!(
@@ -1417,7 +1468,7 @@ mod tests {
     fn the_pending_file_does_not_survive_locking_or_the_idle_lock() {
         let (mut service, _, clock) = unlocked();
         service
-            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("a", SECRET_X)]))
             .unwrap();
         service.lock();
         service.unlock(PASSWORD).unwrap();
@@ -1430,7 +1481,7 @@ mod tests {
         );
 
         service
-            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("a", SECRET_X)]))
             .unwrap();
         clock.advance_secs(301);
         service.tick();
@@ -1449,7 +1500,7 @@ mod tests {
         let (mut service, _, _) = unlocked();
         service.lock();
         assert_eq!(
-            service.import_preview(FORMAT, "x").unwrap_err().code,
+            service.preview_text(FORMAT, "x").unwrap_err().code,
             IpcErrorCode::Locked
         );
         assert_eq!(
@@ -1463,7 +1514,7 @@ mod tests {
         let (mut service, _, _) = unlocked();
         assert_eq!(
             service
-                .import_preview("nonsense", "x")
+                .preview_text("nonsense", "x")
                 .unwrap_err()
                 .message
                 .as_deref(),
@@ -1471,13 +1522,13 @@ mod tests {
         );
         assert_eq!(
             service
-                .import_preview(FORMAT, "")
+                .preview_text(FORMAT, "")
                 .unwrap_err()
                 .message
                 .as_deref(),
             Some("no accounts were found in the file")
         );
-        let report = service.import_preview(FORMAT, "hello\nworld\n").unwrap();
+        let report = service.preview_text(FORMAT, "hello\nworld\n").unwrap();
         assert_eq!((report.items.len(), report.skipped.len()), (0, 2));
     }
 
@@ -1485,7 +1536,7 @@ mod tests {
     fn a_save_failure_surfaces_and_the_file_is_not_offered_again() {
         let (mut service, storage, _) = unlocked();
         let preview = service
-            .import_preview(FORMAT, &export(&[("a", SECRET_X)]))
+            .preview_text(FORMAT, &export(&[("a", SECRET_X)]))
             .unwrap();
         storage.set_failing(true);
         assert_eq!(
@@ -1515,7 +1566,7 @@ mod tests {
             .iter()
             .map(|(a, b)| (a.as_str(), b.as_str()))
             .collect();
-        let preview = service.import_preview(FORMAT, &export(&borrowed)).unwrap();
+        let preview = service.preview_text(FORMAT, &export(&borrowed)).unwrap();
         let before = storage.bytes();
         service.import_apply(accept_defaults(&preview)).unwrap();
         assert_ne!(storage.bytes(), before);
@@ -1527,7 +1578,7 @@ mod tests {
         let (mut service, _, _) = unlocked();
         let existing = service.add_entry(totp_request("a")).unwrap();
         let file = export(&[("renamed", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")]);
-        let preview = service.import_preview(FORMAT, &file).unwrap();
+        let preview = service.preview_text(FORMAT, &file).unwrap();
         let item = &preview.items[0];
         assert_eq!(item.status, ImportStatus::AlreadyUnderOtherName);
         assert_eq!(item.matches.as_deref(), Some("Example · a"));
@@ -1543,5 +1594,72 @@ mod tests {
             (entries[0].id.as_str(), entries[0].account.as_str()),
             (existing.as_str(), "renamed")
         );
+    }
+
+    fn protected_archive(content: &str, password: &[u8]) -> Vec<u8> {
+        use std::io::Write;
+        use zip::CompressionMethod;
+        use zip::unstable::write::FileOptionsExt;
+        use zip::write::{FileOptions, ZipWriter};
+
+        let options = FileOptions::<'_, '_, ()>::default()
+            .compression_method(CompressionMethod::Deflated)
+            .with_deprecated_encryption(password)
+            .unwrap();
+        let mut writer = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        writer.start_file("export.txt", options).unwrap();
+        writer.write_all(content.as_bytes()).unwrap();
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn a_password_protected_archive_previews_like_the_text_file_inside() {
+        let (mut service, _, _) = unlocked();
+        let zip = protected_archive(&export(&[("one", SECRET_X), ("two", SECRET_Y)]), b"pw-1");
+        let from_zip = service.import_preview(FORMAT, &zip, "pw-1").unwrap();
+        let from_text = service
+            .preview_text(FORMAT, &export(&[("one", SECRET_X), ("two", SECRET_Y)]))
+            .unwrap();
+        assert_eq!(
+            serde_json::to_string(&from_zip).unwrap(),
+            serde_json::to_string(&from_text).unwrap()
+        );
+        service.import_apply(accept_defaults(&from_zip)).unwrap();
+        assert_eq!(accounts(&mut service).len(), 2);
+    }
+
+    #[test]
+    fn archive_problems_are_reported_without_changing_anything() {
+        let (mut service, _, _) = unlocked();
+        let zip = protected_archive(&export(&[("one", SECRET_X)]), b"pw-1");
+        assert_eq!(
+            service.import_preview(FORMAT, &zip, "").unwrap_err().code,
+            IpcErrorCode::PasswordRequired
+        );
+        let wrong = service.import_preview(FORMAT, &zip, "pw-2").unwrap_err();
+        assert_eq!(wrong.code, IpcErrorCode::InvalidInput);
+        assert_eq!(
+            wrong.message.as_deref(),
+            Some("wrong password, or the file is damaged")
+        );
+        assert!(accounts(&mut service).is_empty());
+    }
+
+    #[test]
+    fn a_wrong_password_keeps_an_earlier_preview_untouched_and_never_echoes_the_password() {
+        let (mut service, _, _) = unlocked();
+        service
+            .preview_text(FORMAT, &export(&[("one", SECRET_X)]))
+            .unwrap();
+        let zip = protected_archive(&export(&[("two", SECRET_Y)]), b"pw-1");
+        let failure = service
+            .import_preview(FORMAT, &zip, "hunter2-guess")
+            .unwrap_err();
+        assert!(!format!("{failure:?}").contains("hunter2-guess"));
+        let result = service
+            .import_apply(vec![choice(0, ImportDecision::Add)])
+            .unwrap();
+        assert_eq!(result.added, 1);
+        assert_eq!(accounts(&mut service), ["one"]);
     }
 }

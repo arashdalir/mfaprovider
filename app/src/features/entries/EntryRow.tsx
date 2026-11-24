@@ -8,6 +8,7 @@ import { formatCode } from "./format";
 
 const LOW_SECONDS = 5;
 export const REVEAL_SECONDS = 30;
+const TOGGLE_WIDTH = "w-20";
 const MASKED_CODE = "••• •••";
 
 /** A revealed code hides itself again after `REVEAL_SECONDS`. */
@@ -110,7 +111,13 @@ function CodeArea({
           <span className="px-2 font-mono text-2xl tracking-wider" aria-label="Code hidden">
             {MASKED_CODE}
           </span>
-          <Button variant="outline" size="sm" aria-label={`Show code for ${title}`} onClick={show}>
+          <Button
+            variant="outline"
+            size="sm"
+            className={TOGGLE_WIDTH}
+            aria-label={`Show code for ${title}`}
+            onClick={show}
+          >
             <Eye /> Show
           </Button>
           <Button
@@ -133,8 +140,14 @@ function CodeArea({
             {formatCode(code.text)}
           </Button>
           {hideCodes && (
-            <Button variant="ghost" size="icon" aria-label={`Hide code for ${title}`} onClick={hide}>
-              <EyeOff />
+            <Button
+              variant="outline"
+              size="sm"
+              className={TOGGLE_WIDTH}
+              aria-label={`Hide code for ${title}`}
+              onClick={hide}
+            >
+              <EyeOff /> Hide
             </Button>
           )}
         </>

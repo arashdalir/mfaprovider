@@ -1,4 +1,5 @@
 use mfa_core::vault::{EntryError, SessionError, VaultError};
+use mfa_formats::archive::ArchiveError;
 use mfa_formats::otpauth::OtpauthError;
 use mfa_formats::qr::QrImageError;
 use serde::Serialize;
@@ -12,6 +13,7 @@ pub enum IpcErrorCode {
     NoVault,
     AlreadyExists,
     WrongPassword,
+    PasswordRequired,
     NotFound,
     InvalidInput,
     Unsupported,
@@ -62,6 +64,16 @@ impl From<OtpauthError> for IpcError {
     /// These messages are fixed sentences that never repeat the secret.
     fn from(error: OtpauthError) -> Self {
         Self::invalid_input(error.to_string())
+    }
+}
+
+impl From<ArchiveError> for IpcError {
+    /// Fixed sentences; a missing password is a code of its own so the UI can ask for it.
+    fn from(error: ArchiveError) -> Self {
+        match error {
+            ArchiveError::PasswordRequired => Self::new(IpcErrorCode::PasswordRequired),
+            other => Self::invalid_input(other.to_string()),
+        }
     }
 }
 
