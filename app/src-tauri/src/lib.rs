@@ -36,6 +36,7 @@ pub fn run() {
             commands::unlock,
             commands::lock,
             commands::record_activity,
+            commands::set_idle_lock,
             commands::list_entries,
             commands::add_entry,
             commands::edit_entry,

@@ -7,6 +7,7 @@ import { useApi } from "@/ipc/api-context";
 import type { EntryView, OtpTypeView, ParamSpecView } from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
 
+import { RevealSecret } from "./RevealSecret";
 import {
   blankValues,
   defaultParams,
@@ -146,6 +147,8 @@ function FormBody({ entry, types, onDone, onCancel }: EntryFormProps & { types: 
           </Button>
         </div>
       </div>
+
+      {entry && <RevealSecret entryId={entry.id} />}
 
       {supported ? (
         (type?.params ?? []).map((spec) => (

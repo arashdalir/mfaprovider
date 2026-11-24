@@ -10,6 +10,7 @@
     "allow-unlock",
     "allow-lock",
     "allow-record-activity",
+    "allow-set-idle-lock",
     "allow-list-entries",
     "allow-add-entry",
     "allow-edit-entry",

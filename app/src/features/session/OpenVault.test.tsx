@@ -29,7 +29,7 @@ function open(onLock = vi.fn()) {
   });
   render(
     <ApiContext.Provider value={api}>
-      <OpenVault onLock={onLock} />
+      <OpenVault onLock={onLock} theme="system" onThemeChange={vi.fn()} />
     </ApiContext.Provider>,
   );
   return { api, onLock };
@@ -59,5 +59,26 @@ describe("OpenVault", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.editEntry).toHaveBeenCalledWith("1", expect.objectContaining({ account: "alice!" }));
     expect(await screen.findByRole("button", { name: "Add account" })).toBeInTheDocument();
+  });
+});
+
+describe("OpenVault settings", () => {
+  it("tells the core the remembered idle time once unlocked", async () => {
+    window.localStorage.setItem(
+      "mfa-settings",
+      JSON.stringify({ idleLockMinutes: 15, clipboardClearSeconds: 30 }),
+    );
+    const { api } = open();
+    await screen.findByText(/GitHub/);
+    expect(api.setIdleLock).toHaveBeenCalledWith(900);
+    window.localStorage.clear();
+  });
+
+  it("opens and closes the settings screen", async () => {
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("region", { name: "Settings" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText(/GitHub/)).toBeInTheDocument();
   });
 });

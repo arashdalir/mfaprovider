@@ -12,6 +12,7 @@ export function fakeApi(overrides: Partial<VaultApi> = {}): VaultApi {
     unlock: resolved(),
     lock: resolved(),
     recordActivity: resolved(),
+    setIdleLock: resolved(),
     listEntries: vi.fn().mockResolvedValue([]),
     addEntry: vi.fn().mockResolvedValue("new-id"),
     editEntry: resolved(),

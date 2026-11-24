@@ -1,5 +1,7 @@
 //! What each IPC command does, independent of Tauri so it can be tested directly.
 
+use std::time::Duration;
+
 use mfa_core::otp::OtpRegistry;
 use mfa_core::vault::{
     Clock, EntryChanges, KdfParams, LockPolicy, NewEntry, Rng, Storage, SystemEvent, VaultSession,
@@ -45,6 +47,21 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
     /// The OTP types a form can offer; needs no unlocked vault.
     pub fn otp_types(&self) -> Vec<OtpTypeView> {
         otp_type_views(&self.registry)
+    }
+
+    /// Sets how long the vault may sit idle before it locks; `None` turns the idle lock off.
+    /// Locking on background and suspend stays as the default policy says.
+    pub fn set_idle_lock(&mut self, seconds: Option<u32>) -> Result<(), IpcError> {
+        if seconds == Some(0) {
+            return Err(IpcError::invalid_input(
+                "the idle time must be at least one second",
+            ));
+        }
+        self.session.set_policy(LockPolicy {
+            idle_timeout: seconds.map(|s| Duration::from_secs(u64::from(s))),
+            ..LockPolicy::default()
+        });
+        Ok(())
     }
 
     pub fn lock(&mut self) {
@@ -405,6 +422,43 @@ mod tests {
             other => panic!("unexpected {other:?}"),
         };
         assert_ne!(text(&before), text(&after));
+    }
+
+    #[test]
+    fn the_idle_lock_time_can_be_changed_or_switched_off() {
+        let (mut service, _, clock) = unlocked();
+        service.set_idle_lock(Some(60)).unwrap();
+        clock.advance_secs(59);
+        assert!(service.status().unwrap().unlocked);
+        clock.advance_secs(2);
+        assert!(!service.status().unwrap().unlocked);
+
+        let (mut service, _, clock) = unlocked();
+        service.set_idle_lock(None).unwrap();
+        clock.advance_secs(1_000_000);
+        assert!(service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn a_zero_idle_time_is_refused_and_changes_nothing() {
+        let (mut service, _, clock) = unlocked();
+        assert_eq!(
+            service.set_idle_lock(Some(0)).unwrap_err().code,
+            IpcErrorCode::InvalidInput
+        );
+        clock.advance_secs(200);
+        assert!(
+            service.status().unwrap().unlocked,
+            "the default five minutes still applies"
+        );
+    }
+
+    #[test]
+    fn changing_the_idle_time_keeps_locking_on_background() {
+        let (mut service, _, _) = unlocked();
+        service.set_idle_lock(None).unwrap();
+        service.notify(SystemEvent::Backgrounded);
+        assert!(!service.status().unwrap().unlocked);
     }
 
     #[test]

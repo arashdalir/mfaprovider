@@ -67,6 +67,15 @@ pub async fn record_activity(state: State<'_, AppState>) -> Result<(), IpcError>
     Ok(())
 }
 
+/// `seconds` of `null` turns the idle lock off.
+#[tauri::command]
+pub async fn set_idle_lock(
+    state: State<'_, AppState>,
+    seconds: Option<u32>,
+) -> Result<(), IpcError> {
+    state.service().set_idle_lock(seconds)
+}
+
 #[tauri::command]
 pub async fn list_entries(state: State<'_, AppState>) -> Result<Vec<EntryView>, IpcError> {
     state.service().list_entries()

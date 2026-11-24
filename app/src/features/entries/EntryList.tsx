@@ -5,14 +5,20 @@ import { useApi } from "@/ipc/api-context";
 import type { EntryView } from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
 
+import { loadSettings } from "@/features/settings/settings";
+
 import { copyWithAutoClear } from "./clipboard";
 import { EntryRow } from "./EntryRow";
 import { allTags, filterEntries } from "./filter";
 import { useEntries } from "./useEntries";
 
+function copyWithConfiguredDelay(text: string): Promise<void> {
+  return copyWithAutoClear(text, loadSettings().clipboardClearSeconds * 1000);
+}
+
 export function EntryList({
   onEdit,
-  copy = copyWithAutoClear,
+  copy = copyWithConfiguredDelay,
 }: {
   onEdit: (entry: EntryView) => void;
   copy?: (text: string) => Promise<void>;

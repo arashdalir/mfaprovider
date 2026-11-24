@@ -9,6 +9,7 @@ const COMMANDS: &[&str] = &[
     "unlock",
     "lock",
     "record_activity",
+    "set_idle_lock",
     "list_entries",
     "add_entry",
     "edit_entry",

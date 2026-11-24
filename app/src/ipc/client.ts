@@ -57,6 +57,7 @@ export const ipc = {
   unlock: (password: string) => call<void>("unlock", { password }),
   lock: () => call<void>("lock"),
   recordActivity: () => call<void>("record_activity"),
+  setIdleLock: (seconds: number | null) => call<void>("set_idle_lock", { seconds }),
   listEntries: () => call<EntryView[]>("list_entries"),
   addEntry: (request: NewEntryRequest) => call<string>("add_entry", { request }),
   editEntry: (id: string, request: EntryChangesRequest) =>

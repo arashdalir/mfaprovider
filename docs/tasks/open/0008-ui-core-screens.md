@@ -33,5 +33,7 @@ The React/shadcn UI for the MVP flows: create vault, unlock, code list with coun
 
 - 2026-11-24: Step 3 done: shell `list_otp_types` command (+ `OtpRegistry::types`, `EntryView.params`; all registration lists and the drift tests updated), add/edit/delete form (`features/entries/EntryForm`) generated from the schema: edit sends only changed fields (a test caught that default-filled params would otherwise be rewritten), unsupported types editable for metadata only and never get params sent, delete needs inline confirmation, `noValidate` so our own messages show consistently. UI tests: 91, shell: 52, core: 148.
 
+- 2026-11-24: Step 4 done: reveal-secret flow in the edit form (password re-entry, hides after 30 s or on request, dropped on unmount; Enter in its box cannot submit the enclosing form), settings screen (idle lock 1/5/15/30 min or never, clipboard clear 10-120 s, theme) persisted in localStorage with validation; the UI re-applies the idle time to the core after each unlock via new `set_idle_lock` command (core forgets it on restart; zero is refused). Shell tests 55, UI 111.
+
 ## Next step
-Step 4: reveal-secret flow (re-enter password, auto-hide), settings (auto-lock, clipboard-clear seconds, theme), then a real smoke-run with `pnpm tauri dev`, then component keyboard/width checks and task close.
+Real smoke-run with `pnpm tauri dev` (first time any command runs in the real app), fix what it shows, then keyboard/width checks, CSP check of the built page, task close.
