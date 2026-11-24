@@ -1,8 +1,8 @@
 # TASK-0008: UI — onboarding, unlock, code list, entry forms
 
-- Status: open
+- Status: in-progress
 - Created: 2026-11-17
-- Updated: 2026-11-17
+- Updated: 2026-11-24
 - Related ADRs: ADR-0002, ADR-0003, ADR-0006
 
 ## Goal
@@ -22,5 +22,7 @@ The React/shadcn UI for the MVP flows: create vault, unlock, code list with coun
 ## Progress log (append-only, dated)
 - 2026-11-17: Task created.
 
+- 2026-11-24: Started. Asking the user to pick the code-list layout and theme before building (per the 2026-11-17 note).
+
 ## Next step
-After TASK-0007: sketch the screens (list, add, unlock) as a mock for the user to approve, then build from the generated IPC client.
+Get the user's layout/theme choice, record it, then build: app shell + screen state machine (loading → create | unlock → list), unlock/create screens first, using `src/ipc/client.ts` only.
