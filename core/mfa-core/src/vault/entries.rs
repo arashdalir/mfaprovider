@@ -42,6 +42,16 @@ pub struct NewEntry {
     pub notes: String,
 }
 
+/// One step of an import, applied together with the others or not at all.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ImportOp {
+    /// Adds a new entry under `id`.
+    Add { id: EntryId, new: NewEntry },
+    /// Overwrites an existing entry's type, name, secret and parameters; its id, position,
+    /// tags, notes and icon stay.
+    Replace { id: EntryId, with: NewEntry },
+}
+
 /// Fields to change; `None` leaves a field as it is. The OTP type cannot change: delete the
 /// entry and add a new one instead.
 #[derive(Debug, Default)]
@@ -139,6 +149,65 @@ impl VaultData {
         if let Some(notes) = changes.notes {
             entry.notes = notes;
         }
+        entry.updated_at = now_ms;
+        Ok(())
+    }
+
+    /// Applies all of `ops` or, if any is invalid, none of them.
+    ///
+    /// # Errors
+    /// [`EntryError::DuplicateId`] if an added id is already used (by an entry, a deletion marker
+    /// or another op) or an entry is replaced twice; [`EntryError::NotFound`] for a replaced entry
+    /// that does not exist; or any validation error of a definition.
+    pub fn apply_import(
+        &mut self,
+        ops: Vec<ImportOp>,
+        registry: &OtpRegistry,
+        now_ms: i64,
+    ) -> Result<(), EntryError> {
+        self.check_import(&ops, registry)?;
+        for op in ops {
+            match op {
+                ImportOp::Add { id, new } => self.add_entry(id, new, registry, now_ms)?,
+                ImportOp::Replace { id, with } => self.replace_entry(id, with, now_ms)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn check_import(&self, ops: &[ImportOp], registry: &OtpRegistry) -> Result<(), EntryError> {
+        let mut claimed: Vec<EntryId> = Vec::new();
+        for op in ops {
+            let (id, definition, must_exist) = match op {
+                ImportOp::Add { id, new } => (*id, new, false),
+                ImportOp::Replace { id, with } => (*id, with, true),
+            };
+            definition.validate(registry)?;
+            let in_use = self.position_of(id).is_ok() || self.tombstones.iter().any(|t| t.id == id);
+            if must_exist && self.position_of(id).is_err() {
+                return Err(EntryError::NotFound(id));
+            }
+            if (!must_exist && in_use) || claimed.contains(&id) {
+                return Err(EntryError::DuplicateId(id));
+            }
+            claimed.push(id);
+        }
+        Ok(())
+    }
+
+    fn replace_entry(
+        &mut self,
+        id: EntryId,
+        with: NewEntry,
+        now_ms: i64,
+    ) -> Result<(), EntryError> {
+        let position = self.position_of(id)?;
+        let entry = &mut self.entries[position];
+        entry.otp_type = with.otp_type;
+        entry.issuer = trimmed(&with.issuer);
+        entry.account = trimmed(&with.account);
+        entry.secret = with.secret;
+        entry.params = with.params;
         entry.updated_at = now_ms;
         Ok(())
     }
@@ -544,6 +613,161 @@ mod tests {
             unsupported.advance_counter(id(2), &registry(), 0),
             Err(EntryError::UnknownType("vendor-x".into()))
         );
+    }
+
+    fn definition(otp_type: &str, issuer: &str, account: &str, seed: u8) -> NewEntry {
+        NewEntry {
+            otp_type: otp_type.into(),
+            issuer: issuer.into(),
+            account: account.into(),
+            secret: Secret::new(vec![seed; 20]),
+            params: Params::new(),
+            icon: None,
+            tags: Vec::new(),
+            notes: String::new(),
+        }
+    }
+
+    fn names(data: &VaultData) -> Vec<(String, String)> {
+        data.entries
+            .iter()
+            .map(|e| (e.issuer.clone(), e.account.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn an_import_adds_and_replaces_in_one_step() {
+        let mut data = vault_with(&[("A", "a"), ("B", "b")]);
+        let tag = EntryChanges {
+            tags: Some(vec!["keep".into()]),
+            notes: Some("keep too".into()),
+            ..EntryChanges::default()
+        };
+        data.edit_entry(id(2), tag, &registry(), 11).unwrap();
+        data.apply_import(
+            vec![
+                ImportOp::Add {
+                    id: id(7),
+                    new: definition("totp", "C", "c", 3),
+                },
+                ImportOp::Replace {
+                    id: id(2),
+                    with: definition("hotp", " B2 ", " b2 ", 9),
+                },
+                ImportOp::Add {
+                    id: id(8),
+                    new: definition("totp", "D", "d", 4),
+                },
+            ],
+            &registry(),
+            500,
+        )
+        .unwrap();
+
+        assert_eq!(order(&data), [id(1), id(2), id(7), id(8)]);
+        let replaced = data.entry(id(2)).unwrap();
+        assert_eq!(
+            (replaced.issuer.as_str(), replaced.account.as_str()),
+            ("B2", "b2")
+        );
+        assert_eq!(replaced.otp_type, "hotp");
+        assert_eq!(replaced.secret.as_bytes(), [9; 20]);
+        assert_eq!(replaced.tags, ["keep"]);
+        assert_eq!(replaced.notes, "keep too");
+        assert_eq!((replaced.created_at, replaced.updated_at), (10, 500));
+        assert_eq!(data.entry(id(7)).unwrap().created_at, 500);
+    }
+
+    #[test]
+    fn one_invalid_op_means_nothing_is_imported() {
+        let mut data = vault_with(&[("A", "a")]);
+        let before = names(&data);
+        let mut broken = definition("totp", "X", "x", 1);
+        broken.params = Params::new().with("digits", "99");
+        let result = data.apply_import(
+            vec![
+                ImportOp::Add {
+                    id: id(7),
+                    new: definition("totp", "C", "c", 3),
+                },
+                ImportOp::Replace {
+                    id: id(1),
+                    with: definition("totp", "A2", "a2", 5),
+                },
+                ImportOp::Add {
+                    id: id(8),
+                    new: broken,
+                },
+            ],
+            &registry(),
+            500,
+        );
+        assert!(matches!(result, Err(EntryError::InvalidParams(_))));
+        assert_eq!(names(&data), before);
+        assert_eq!(data.entry(id(1)).unwrap().secret.as_bytes(), [1; 20]);
+    }
+
+    #[test]
+    fn replacing_a_missing_entry_or_reusing_an_id_is_refused_without_changes() {
+        let mut data = vault_with(&[("A", "a")]);
+        data.delete_entry(id(1), 20).unwrap();
+        data.add_entry(id(2), new_entry("B", "b"), &registry(), 30)
+            .unwrap();
+        let before = names(&data);
+        let add = |n: u8| ImportOp::Add {
+            id: id(n),
+            new: definition("totp", "N", "n", n),
+        };
+
+        assert_eq!(
+            data.apply_import(
+                vec![
+                    add(5),
+                    ImportOp::Replace {
+                        id: id(9),
+                        with: definition("totp", "R", "r", 1)
+                    }
+                ],
+                &registry(),
+                1,
+            ),
+            Err(EntryError::NotFound(id(9)))
+        );
+        assert_eq!(
+            data.apply_import(vec![add(2)], &registry(), 1),
+            Err(EntryError::DuplicateId(id(2)))
+        );
+        assert_eq!(
+            data.apply_import(vec![add(1)], &registry(), 1),
+            Err(EntryError::DuplicateId(id(1))),
+            "a deleted entry's id stays reserved"
+        );
+        assert_eq!(
+            data.apply_import(vec![add(6), add(6)], &registry(), 1),
+            Err(EntryError::DuplicateId(id(6)))
+        );
+        let twice = vec![
+            ImportOp::Replace {
+                id: id(2),
+                with: definition("totp", "R", "r", 1),
+            },
+            ImportOp::Replace {
+                id: id(2),
+                with: definition("totp", "S", "s", 2),
+            },
+        ];
+        assert_eq!(
+            data.apply_import(twice, &registry(), 1),
+            Err(EntryError::DuplicateId(id(2)))
+        );
+        assert_eq!(names(&data), before);
+    }
+
+    #[test]
+    fn an_empty_import_changes_nothing() {
+        let mut data = vault_with(&[("A", "a")]);
+        data.apply_import(Vec::new(), &registry(), 5).unwrap();
+        assert_eq!(data.entry(id(1)).unwrap().updated_at, 10);
     }
 
     #[test]

@@ -24,5 +24,7 @@ Importers behind one `Importer` interface in `mfa-formats` for Google Authentica
 ## Progress log (append-only, dated)
 - 2026-11-17: Task created.
 
+- 2026-11-24: Stage 1 done. Core: `ImportOp` + `VaultData::apply_import` (all-or-nothing: validates every op, rejects reused/duplicate ids and double replaces, then applies) + `VaultSession::{import, new_entry_id}` (one save); +7 tests. `mfa-formats`: `Importer` trait + `all_importers`/`importer`, shared text decoding (UTF-8, BOM, UTF-16 LE/BE), `LinkListImporter` (id `otpauth-list`: blank/`#` lines ignored, bad lines reported per line number with fixed sentences, size 5 MiB / 5000 items), `merge` (`plan_merge` O(n) via name index: New / DuplicateOfVault / DuplicateOfEarlierItem / ConflictWithVault; `Decision` with defaults Add for new+conflict, Skip for duplicates; `build_ops` with replace checks). Tests: formats 70 (import 13, merge 16), core 156. **Real export check** (opt-in ignored test reading `MFA_SAMPLE_EXPORT`, prints counts only, nothing copied): the user's WinAuth file = 58 accounts read, 0 skipped, 58 new in an empty vault, 8 with issuer.
+
 ## Next step
-After TASK-0009: define the `Importer` trait and merge-planner types, then implement the Google migration decoder (protobuf) test-first.
+Stage 2: shell DTOs + `VaultService` pending-import slot (dropped on lock like drafts) + commands `list_import_formats`, `import_preview`, `import_apply`, `import_discard` + registration lists + client; then stage 3 UI wizard (pick file → preview with per-item decisions → apply). Google migration, Aegis, 2FAS afterwards.

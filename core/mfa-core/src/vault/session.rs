@@ -7,7 +7,7 @@ use thiserror::Error;
 use super::clock::Clock;
 use super::codes::EntryCode;
 use super::container::{self, OpenedVault};
-use super::entries::{EntryChanges, EntryError, NewEntry};
+use super::entries::{EntryChanges, EntryError, ImportOp, NewEntry};
 use super::error::VaultError;
 use super::kdf::KdfParams;
 use super::model::{EntryId, VaultData};
@@ -220,6 +220,24 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
         let now = self.clock.unix_ms();
         self.try_edit(|data| data.add_entry(id, new, registry, now))?;
         Ok(id)
+    }
+
+    /// A fresh random id for an entry about to be added by [`VaultSession::import`].
+    pub fn new_entry_id(&mut self) -> EntryId {
+        EntryId::random(&mut self.rng)
+    }
+
+    /// Applies every op of an import with a single save, or none of them if any is invalid.
+    ///
+    /// # Errors
+    /// As [`VaultData::apply_import`], plus those of [`VaultSession::edit`].
+    pub fn import(
+        &mut self,
+        ops: Vec<ImportOp>,
+        registry: &OtpRegistry,
+    ) -> Result<(), SessionError> {
+        let now = self.clock.unix_ms();
+        self.try_edit(|data| data.apply_import(ops, registry, now))
     }
 
     /// # Errors
@@ -724,6 +742,68 @@ mod tests {
         assert_eq!(first.validity.map(|v| v.period_seconds), Some(30));
         clock.advance_secs(30);
         assert_eq!(session.codes(&registry()).err(), Some(SessionError::Locked));
+    }
+
+    #[test]
+    fn an_import_is_one_atomic_saved_change() {
+        let (mut session, storage, clock) = created(LockPolicy::default());
+        let existing = session.add_entry(new_totp("old"), &registry()).unwrap();
+        let (first, second) = (session.new_entry_id(), session.new_entry_id());
+        assert_ne!(first, second);
+        session
+            .import(
+                vec![
+                    ImportOp::Add {
+                        id: first,
+                        new: new_totp("one"),
+                    },
+                    ImportOp::Replace {
+                        id: existing,
+                        with: new_totp("replaced"),
+                    },
+                    ImportOp::Add {
+                        id: second,
+                        new: new_totp("two"),
+                    },
+                ],
+                &registry(),
+            )
+            .unwrap();
+        let mut restarted = session_over(&storage, &clock, LockPolicy::default());
+        restarted.unlock(PASSWORD).unwrap();
+        let accounts: Vec<_> = restarted
+            .data()
+            .unwrap()
+            .entries
+            .iter()
+            .map(|e| e.account.clone())
+            .collect();
+        assert_eq!(accounts, ["replaced", "one", "two"]);
+    }
+
+    #[test]
+    fn a_refused_import_writes_nothing() {
+        let (mut session, storage, _) = created(short_idle());
+        let before = storage.bytes();
+        let mut bad = new_totp("bad");
+        bad.otp_type = "vendor-x".into();
+        let id = session.new_entry_id();
+        assert!(matches!(
+            session.import(vec![ImportOp::Add { id, new: bad }], &registry()),
+            Err(SessionError::Entry(EntryError::UnknownType(_)))
+        ));
+        assert_eq!(storage.bytes(), before);
+        assert_eq!(entry_count(&mut session), 0);
+    }
+
+    #[test]
+    fn importing_needs_an_unlocked_vault() {
+        let (mut session, _, _) = created(LockPolicy::default());
+        session.lock();
+        assert_eq!(
+            session.import(Vec::new(), &registry()),
+            Err(SessionError::Locked)
+        );
     }
 
     #[test]
