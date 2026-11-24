@@ -30,7 +30,7 @@ pub enum EntryError {
 }
 
 /// What the user supplies when adding an account.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct NewEntry {
     pub otp_type: String,
     pub issuer: String,
@@ -56,6 +56,17 @@ pub struct EntryChanges {
     pub notes: Option<String>,
 }
 
+impl NewEntry {
+    /// Checks the secret and parameters the way adding does, without adding anything.
+    ///
+    /// # Errors
+    /// [`EntryError::EmptySecret`], [`EntryError::UnknownType`] or [`EntryError::InvalidParams`].
+    pub fn validate(&self, registry: &OtpRegistry) -> Result<(), EntryError> {
+        validate_secret(&self.secret)?;
+        validate_params(registry, &self.otp_type, &self.params)
+    }
+}
+
 impl VaultData {
     /// # Errors
     /// [`EntryError::DuplicateId`] if `id` belongs to an entry or a deletion marker;
@@ -71,8 +82,7 @@ impl VaultData {
         if self.position_of(id).is_ok() || self.tombstones.iter().any(|t| t.id == id) {
             return Err(EntryError::DuplicateId(id));
         }
-        validate_secret(&new.secret)?;
-        validate_params(registry, &new.otp_type, &new.params)?;
+        new.validate(registry)?;
         self.entries.push(Entry {
             id,
             otp_type: new.otp_type,
@@ -367,6 +377,20 @@ mod tests {
             Err(EntryError::EmptySecret)
         );
         assert_eq!(data.entries.len(), 0);
+    }
+
+    #[test]
+    fn a_definition_can_be_validated_without_adding_it() {
+        assert_eq!(new_entry("A", "a").validate(&registry()), Ok(()));
+        let mut bad = new_entry("A", "a");
+        bad.params = Params::new().with("digits", "99");
+        assert!(matches!(
+            bad.validate(&registry()),
+            Err(EntryError::InvalidParams(_))
+        ));
+        let mut empty = new_entry("A", "a");
+        empty.secret = Secret::new(Vec::new());
+        assert_eq!(empty.validate(&registry()), Err(EntryError::EmptySecret));
     }
 
     #[test]

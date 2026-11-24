@@ -1,0 +1,15 @@
+[package]
+name = "mfa-formats"
+description = "Import and export codecs: otpauth URIs now, migration and backup formats later."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mfa-core = { path = "../mfa-core", version = "0.0.0" }
+percent-encoding = "2.3.2"
+thiserror = "2.0.21"
