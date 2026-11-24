@@ -72,6 +72,15 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Generated IPC types are up to date
+        run: |
+          if [ -n "$(git status --porcelain -- src/ipc/generated)" ]; then
+            git status --porcelain -- src/ipc/generated
+            echo "::error::Run 'cargo test' in app/src-tauri and commit app/src/ipc/generated"
+            exit 1
+          fi
+        shell: bash
 
   supply-chain:
     name: Dependency audit
