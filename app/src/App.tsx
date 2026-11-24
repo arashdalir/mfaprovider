@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { OpenVault } from "@/features/session/OpenVault";
 import { SessionGate } from "@/features/session/SessionGate";
 import { ThemeSwitch } from "@/features/theme/ThemeSwitch";
 import { useTheme } from "@/features/theme/useTheme";
@@ -12,16 +12,7 @@ export function App() {
         <ThemeSwitch theme={theme} onChange={setTheme} />
       </header>
       <main className="flex-1">
-        <SessionGate>
-          {({ lock }) => (
-            <div className="flex flex-col items-start gap-3">
-              <p>Your vault is open.</p>
-              <Button variant="outline" onClick={() => void lock()}>
-                Lock
-              </Button>
-            </div>
-          )}
-        </SessionGate>
+        <SessionGate>{({ lock }) => <OpenVault onLock={() => void lock()} />}</SessionGate>
       </main>
     </div>
   );

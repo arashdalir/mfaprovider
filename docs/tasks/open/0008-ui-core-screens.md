@@ -10,9 +10,9 @@ The React/shadcn UI for the MVP flows: create vault, unlock, code list with coun
 
 ## Acceptance criteria
 - [x] Create-vault and unlock screens; lock button; auto-lock reflected in UI
-- [ ] Code list: live codes, countdown ring/bar, copy with clipboard auto-clear, search, tag filter, reorder
+- [x] Code list: live codes, countdown ring/bar, copy with clipboard auto-clear, search, tag filter, reorder
 - [ ] Add/edit/delete forms generated from the type's parameter schema
-- [ ] "Unsupported type" entries shown, kept intact
+- [x] "Unsupported type" entries shown, kept intact
 - [ ] Component tests (Vitest + Testing Library) for each screen; keyboard-accessible; works at phone and desktop widths
 - [ ] CSP stays strict; no remote assets; lint/typecheck/test green
 
@@ -28,5 +28,8 @@ The React/shadcn UI for the MVP flows: create vault, unlock, code list with coun
 
 - 2026-11-24: Step 1 done: injectable `VaultApi` context (tests use fakes, no module mocking), theme (system + manual switch, storage failures tolerated), `SessionGate` (loading → create | unlock → open; polls status each second so auto-lock shows; failed polls do not eject an open vault), create/unlock screens, error-message mapping. UI tests: 34. Testing Library cleanup added to test setup (was missing).
 
+- 2026-11-24: Step 2 done: compact-row code list (`features/entries`): live codes refreshed each second, readable grouping, countdown bar (progressbar role), copy with 30 s clipboard auto-clear (restarts on new copy; clears even if unreadable, leaves a different clipboard value alone), search + tag filter (client-side over display metadata), up/down reorder (disabled while filtered), HOTP "Next code", unsupported/broken entries shown intact, activity reporter (click/key, max 1 per 5 s; code polling is not activity). UI tests: 63.
+- 2026-11-24: Found a gap: forms "generated from the parameter schema" need the schema over IPC, which TASK-0007 did not expose. Adding a `list_otp_types` command (ids + param specs; integer bounds saturated to 2^53-1 for TypeScript).
+
 ## Next step
-Step 2: code list (compact rows, live codes + countdown, copy with clipboard auto-clear, search, tag filter, reorder), then add/edit/delete forms generated from param schemas, settings, then a real smoke-run with `pnpm tauri dev`.
+Step 3: `list_otp_types` command (shell + client + drift lists), then add/edit/delete forms generated from it, settings (auto-lock, clipboard clear), then a real smoke-run with `pnpm tauri dev`.
