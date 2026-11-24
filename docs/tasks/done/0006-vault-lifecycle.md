@@ -1,6 +1,6 @@
 # TASK-0006: Vault lifecycle — create, unlock, lock, change password
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-17
 - Updated: 2026-11-24
 - Related ADRs: ADR-0003, ADR-0005
@@ -14,7 +14,7 @@ A `Vault` session type in `mfa-core` with create / unlock / lock / change-passwo
 - [x] Auto-lock after configurable idle timeout via injected clock (plus background/suspend events)
 - [x] Atomic save (temp file + rename) through the storage trait; in-memory fake for tests (`FileStorage` in `mfa-storage` implements it on a real filesystem)
 - [x] Wrong password: constant-behaviour failure, no secret-dependent logging (single `UnwrapFailed` error; the core has no logging at all; failed attempts leave the stored file untouched)
-- [ ] CI green (local: 115 tests, fmt, clippy `-D warnings`, `cargo deny` pass on Windows; Linux-only paths — directory fsync, 0600 mode — are verified only by CI)
+- [x] CI green — run 45386459415 green on all jobs, including Rust core on Ubuntu, which runs the Unix-only paths (directory fsync, 0600 mode, `/` path test)
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: 0005. Blocks 0007. Biometric unlock is a separate `BiometricProvider` (TASK-0012); this task only leaves the extension seam in the key-wrapping design (ADR-0003).
@@ -33,5 +33,7 @@ A `Vault` session type in `mfa-core` with create / unlock / lock / change-passwo
 - 2026-11-24: Fixed along the way: clippy flagged platform-specific code in `FileStorage` (unused import / `unnecessary_wraps` on Windows) — restructured with `cfg` blocks so Windows and Linux both lint clean; `cargo deny` flagged the path dependency on `mfa-core` as a wildcard — fixed by giving it an explicit `version`, no policy change.
 - 2026-11-24: Known gaps carried forward: production `Clock` (system time + `Instant`) and `Rng` (OS randomness via `getrandom`) belong in the Tauri shell (TASK-0007); a crash-injection test of the real atomic rename is not possible portably — atomicity rests on `fs::rename` replace semantics plus the tests above; wrong-password throttling is TASK-0007/0008.
 
+- 2026-11-24: CI run 45386459415 for d3350e5 green on all jobs (core and UI on Ubuntu and Windows, dependency audit). Task complete.
+
 ## Next step
-Push, confirm CI is green on Linux and Windows (watch the Unix-only tests), tick the CI criterion and move this task to `done/`. Then TASK-0007 (entry management and typed IPC), which needs the ADR on IPC type generation first.
+None — done. Next: TASK-0007 (entry management and typed IPC); it needs the ADR on IPC type generation (specta vs ts-rs) first.
