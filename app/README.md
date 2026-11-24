@@ -1,32 +1,25 @@
-# React + TypeScript + Vite
+# MFA Provider — app
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Tauri 2 shell (`src-tauri/`, Rust) around a React + TypeScript UI (`src/`). All vault and OTP logic lives in the Rust core (`../core`); the UI talks to it only through `src/ipc/client.ts` (ADR-0012).
 
-Currently, two official plugins are available:
+## Run the real app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+pnpm install
+pnpm tauri dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+If port 5173 is already taken by another project:
+
+```powershell
+pnpm tauri dev --config src-tauri/tauri.alt-port.conf.json
+```
+
+The vault is created on first run under the app data folder (on Windows `%APPDATA%\dev.area_51.android.mfaprovider\vault.mfa`). Delete that folder to start over.
+
+## Checks
+
+```powershell
+pnpm lint; pnpm typecheck; pnpm test
+cargo test --manifest-path src-tauri/Cargo.toml   # also regenerates src/ipc/generated (commit it)
+```
