@@ -1,6 +1,6 @@
 # TASK-0009: Adding entries — otpauth URI, QR image, manual entry
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-17
 - Updated: 2026-11-24
 - Related ADRs: ADR-0004, ADR-0006
@@ -13,7 +13,7 @@ Parse `otpauth://` URIs (TOTP/HOTP/Steam variants) into entries, decode QR codes
 - [x] QR decoding from PNG/JPEG in Rust (seed never touches JS); decoder failures are user-readable, never echo the secret
 - [x] Paste-URI and manual-entry flows in the UI using the same core validation
 - [x] Malformed or hostile input (huge images, invalid base32) rejected safely, covered by tests
-- [ ] CI green
+- [x] CI green
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: 0007 (and 0008 for UI wiring). The `mfa-formats` crate is created here and shared with 0010/0011.
@@ -35,5 +35,7 @@ Parse `otpauth://` URIs (TOTP/HOTP/Steam variants) into entries, decode QR codes
 - 2026-11-24: Shell + UI done. Shell: `DraftView`/`DraftEditsRequest`, draft slot in `VaultService` (replaced by each new draft, dropped on lock, idle lock and tick, kept after a rejected edit or a failed image), commands `draft_from_link`, `draft_from_image` (base64, because raw IPC bodies do not exist on Android), `add_draft`, `discard_drafts`; registration lists + drift tests updated; 71 shell tests incl. QR PNGs generated in tests, several codes per image, non-link codes ignored, secret absent from draft JSON in base32/hex. UI: "Add account" chooser (manual / paste link / QR image), draft review form without any secret field (the secret never reaches JS), picker when an image holds several codes, 10 MiB pre-check; 124 UI tests. Core 149, formats 41.
 - 2026-11-24: Honest limits: the QR/link flows were not clicked through in the real app (no way to drive the window); JPEG QR decoding tested only with images from one encoder (jpeg-encoder); photos over about 25 megapixels are refused by design (ADR-0013); Google `otpauth-migration://` codes are not handled here (TASK-0010) and show as "not an otpauth:// link".
 
+- 2026-11-24: CI green on 10abce0 (all five jobs). Task closed. Not exercised in the real app: the link and QR flows were never clicked through; see the honest limits above.
+
 ## Next step
-Wait for CI; then close. Camera QR scanning is TASK-0012.
+None. Follow-ups: TASK-0010 (importers, WinAuth first; Google migration QR codes), TASK-0012 (camera QR scanning).
