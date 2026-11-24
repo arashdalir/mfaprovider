@@ -32,5 +32,7 @@ Importers behind one `Importer` interface in `mfa-formats` for Google Authentica
 - 2026-11-24: Local test-runner anomaly, not understood: after the stage-3 files were added, `vitest` with the default pool failed every file with "failed to find the current suite" (setup.ts), also at the previously green committed state, while `--pool=vmThreads` passes all 144. A `tauri dev` window and its Vite server were running on the machine at the time; cache moved aside, no effect. Not reproduced in CI so far; to be confirmed there. If CI shows it, investigate for real instead of changing the pool.
 - 2026-11-24: Not done: Google `otpauth-migration://`, Aegis (plain + encrypted), 2FAS importers; the real-app click-through of the import wizard.
 
+- 2026-11-24: CI green on ada69f0 (all five jobs), including the UI tests under the default vitest pool: the local "failed to find the current suite" anomaly did not reproduce on the clean CI machine, so it is treated as a local-environment problem (a `tauri dev` session was running); left as is, to be revisited only if it returns.
+
 ## Next step
 Wait for CI. Then next importers on the same interface: Google `otpauth-migration://` (protobuf; QR codes from TASK-0009 already decode to the link text), Aegis plain, Aegis encrypted, 2FAS. Each with invented fixtures only.
