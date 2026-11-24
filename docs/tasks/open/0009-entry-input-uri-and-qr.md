@@ -27,5 +27,10 @@ Parse `otpauth://` URIs (TOTP/HOTP/Steam variants) into entries, decode QR codes
 
 - 2026-11-24: Wrote ADR-0013 (proposed): `rqrr` + `png` + `zune-jpeg` used directly (not `image`, not `rxing`, not a JS decoder), PNG/JPEG only, limits 10 MiB / 8192 px per side / 25 Mpx / 128 MiB PNG memory / 16 codes. Waiting for user review.
 
+- 2026-11-24: User accepted ADR-0013 as written. Implementing `decode_qr_image` in mfa-formats.
+
+- 2026-11-24: Done: `decode_qr_image` (`mfa-formats/src/qr.rs`, 17 tests): PNG (grey, grey+alpha, RGB, RGBA with transparency flattened onto white, palette, 16-bit) and JPEG read; several codes per image; hostile input: empty/foreign/random bytes, bare magic numbers, truncation at nine points, byte-flip fuzz (no panics), PNG headers claiming 100000x100000 / 8193 wide / 36 Mpx refused before any pixel buffer exists, zero-size PNG, JPEG claiming 60000x60000, over-10-MiB file; a real otpauth QR goes straight into `parse_otpauth`. zune-jpeg reports its own size limit as an untyped error, so its limits are lifted to the format maximum and our check decides (nothing is allocated before it). Deps added: rqrr (no default features), png, zune-jpeg; dev: qrcode, jpeg-encoder, crc32fast. cargo-deny green. Workspace: core 149, formats 41, storage 12.
+- 2026-11-24: Design for the UI flows (seed must not enter JS): the shell keeps parsed links/QR codes as in-memory **drafts** (replaced by each new draft, dropped on lock/idle-lock); the UI only gets a `DraftView` (type, issuer, account, params — no secret), lets the user edit those, and `add_draft` stores it. Image bytes travel to Rust as a raw IPC body (not JSON); the webview never sees decoded text.
+
 ## Next step
-User reviews ADR-0013. After acceptance: add the three dependencies, implement `decode_qr_image` test-first (hostile-input tests listed in the ADR), then shell commands + UI (paste URI, image file, manual entry).
+Shell: DTOs (`DraftView`, `DraftEditsRequest`), draft slot in `VaultService` (cleared on lock/idle), commands `draft_from_link`, `draft_from_image` (raw body), `add_draft`, `discard_drafts` + registration lists + client; then UI: choose Manual / Paste link / From image in "Add account", draft review form. Then close.

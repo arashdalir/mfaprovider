@@ -1,6 +1,6 @@
 # ADR-0013: QR image decoding — `rqrr` + `png` + `zune-jpeg`, with hard input limits
 
-- Status: proposed (2026-11-24) — awaiting user review
+- Status: accepted (2026-11-24, by the user, as written)
 - Date: 2026-11-24
 - Related tasks: TASK-0009 (also TASK-0010 for Google migration QR codes, TASK-0012 for camera frames)
 - Refines: ADR-0004 ("otpauth:// URIs and QR images"), ADR-0002 ("seeds never enter JavaScript")

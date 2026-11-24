@@ -2,3 +2,4 @@
 //! No I/O: callers pass text or bytes in and get entries or errors out.
 
 pub mod otpauth;
+pub mod qr;
