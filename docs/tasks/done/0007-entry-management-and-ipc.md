@@ -1,6 +1,6 @@
 # TASK-0007: Entry management and typed IPC
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-17
 - Updated: 2026-11-24
 - Related ADRs: ADR-0002, ADR-0004, ADR-0005
@@ -39,5 +39,7 @@ Core operations on an unlocked vault (add, edit, delete with tombstone, reorder,
 - 2026-11-24: Done: 13 Tauri commands (`ipc/commands.rs`, thin async wrappers over `ipc/service.rs`, 15 service tests), `platform.rs` (SystemClock, OsRng via `getrandom` 0.4, KDF tuning: target 500 ms, memory cap 256 MiB — device-tuned at vault creation and password change, stored in the file), core `verify_password` + `run_kdf_benchmark`, idle ticker thread, app manifest + capability listing exactly the commands (a test keeps commands.rs, lib.rs handler list, build.rs and capabilities identical), `client.ts` (one module calls `invoke`; oxlint `no-restricted-imports` verified to reject a rogue import; vitest checks client command names against commands.rs, verified to fail on a typo). Counts: core 147, shell 45, UI 8.
 - 2026-11-24: Honest limits: (1) the commands and `setup` hook (app data dir, ticker thread) are compiled and unit-tested via the service but **not yet exercised in a running app** — TASK-0008 is the first real caller; (2) `reveal_secret` returns the seed as a JS string, which cannot be wiped — the UI must show it briefly and drop references; (3) no unlock rate limiting on desktop (Argon2 cost only); (4) backgrounded/suspend events are not yet wired to `notify` (TASK-0012 for Android; desktop keeps idle lock only); (5) `change_password` and `reveal_secret` are not rate-limited either.
 
+- 2026-11-24: CI green on the pushed commit (all jobs). Task closed.
+
 ## Next step
-Wait for CI on the pushed commits; then close TASK-0007 (move to `done/`, set Status done) — or, if the user prefers, first smoke-run the real app (`pnpm tauri dev`) to exercise the commands. Next task: TASK-0008 (UI).
+None. Follow-ups: TASK-0008 (first real caller of the commands; smoke-run there), TASK-0012 (background/suspend events, Android), rate limiting (open question).
