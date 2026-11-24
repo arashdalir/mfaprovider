@@ -13,7 +13,8 @@ The React/shadcn UI for the MVP flows: create vault, unlock, code list with coun
 - [x] Code list: live codes, countdown ring/bar, copy with clipboard auto-clear, search, tag filter, reorder
 - [x] Add/edit/delete forms generated from the type's parameter schema
 - [x] "Unsupported type" entries shown, kept intact
-- [ ] Component tests (Vitest + Testing Library) for each screen; keyboard-accessible; works at phone and desktop widths
+- [x] Component tests (Vitest + Testing Library) for each screen, querying by role and label
+- [ ] Verified by eye: keyboard-only use and phone + desktop widths (not yet checked in a real window)
 - [ ] CSP stays strict; no remote assets; lint/typecheck/test green
 
 ## Decisions & notes (append-only, dated)
@@ -35,5 +36,7 @@ The React/shadcn UI for the MVP flows: create vault, unlock, code list with coun
 
 - 2026-11-24: Step 4 done: reveal-secret flow in the edit form (password re-entry, hides after 30 s or on request, dropped on unmount; Enter in its box cannot submit the enclosing form), settings screen (idle lock 1/5/15/30 min or never, clipboard clear 10-120 s, theme) persisted in localStorage with validation; the UI re-applies the idle time to the core after each unlock via new `set_idle_lock` command (core forgets it on restart; zero is refused). Shell tests 55, UI 111.
 
+- 2026-11-24: Smoke-run (`pnpm tauri dev`, Vite moved to port 5174 by a command-line override because 5173 is used by another project on this machine; no repo change): the real app launched, window "MFA Provider" opened and stayed responsive, setup hook created the app data dir, idle-ticker thread ran without a panic. **Not verified:** any click-through of the real UI (no way to drive the window from here), phone-width layout, and CSP behaviour at runtime. Built page checked statically: no inline script/style, no remote assets (only same-origin JS/CSS), no `dangerouslySetInnerHTML`/`eval`.
+
 ## Next step
-Real smoke-run with `pnpm tauri dev` (first time any command runs in the real app), fix what it shows, then keyboard/width checks, CSP check of the built page, task close.
+User clicks through the app once (`pnpm tauri dev` — if port 5173 is taken: `pnpm tauri dev --config '{"build":{"devUrl":"http://localhost:5174","beforeDevCommand":"pnpm dev --port 5174 --strictPort"}}'`): create vault, add account, copy, edit, reveal, lock/unlock, narrow the window. Fix what they report, then close. Also still open: per-screen keyboard/width checks by eye.
