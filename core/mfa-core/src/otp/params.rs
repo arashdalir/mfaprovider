@@ -26,6 +26,13 @@ impl Params {
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.0.keys().map(String::as_str)
     }
+
+    /// Name/value pairs in name order, so serialisation is deterministic.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.0
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

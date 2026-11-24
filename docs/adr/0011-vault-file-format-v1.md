@@ -1,6 +1,6 @@
 # ADR-0011: Vault file format v1
 
-- Status: proposed (2026-11-24) — awaiting user review
+- Status: accepted (2026-11-24; user reviewed the layout and the "what the file reveals" answer and accepted it as written)
 - Date: 2026-11-24
 - Related tasks: TASK-0005 (also constrains TASK-0006, TASK-0007, TASK-0011)
 - Refines: ADR-0003 (crypto choices) and ADR-0004 (what is stored). Does not change them.

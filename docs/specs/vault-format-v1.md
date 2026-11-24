@@ -1,6 +1,6 @@
 # Vault file format, version 1
 
-Normative layout for the encrypted vault file (ADR-0011, ADR-0003, ADR-0004). Status: **proposed** until ADR-0011 is accepted. All integers are big-endian. A file is one header followed by one encrypted body.
+Normative layout for the encrypted vault file (ADR-0011, ADR-0003, ADR-0004). Status: **accepted** with ADR-0011 (2026-11-24). All integers are big-endian. A file is one header followed by one encrypted body.
 
 ## Container
 
@@ -25,7 +25,7 @@ Header = bytes `0..137`. `body_len` must equal the remaining file length exactly
 ## Keys
 - **Vault key (VK)**: 32 random bytes, generated once at vault creation, never derived from the password.
 - **Key-encryption key (KEK)** = Argon2id(`password`, `salt`, memory, iterations, lanes) → 32 bytes. `password` is the UTF-8 bytes of the user's password after Unicode **NFKC** normalisation.
-- **Password slot** = bytes `12..109` (`kdf_id` … `wrapped_vk`). Changing the password replaces only the slot (new salt, new nonce, re-wrapped VK); the body is untouched.
+- **Password slot** = bytes `12..109` (`kdf_memory_kib` … `wrapped_vk`, 97 bytes). Bytes `0..12` (`magic`, `version`, `kdf_id`, `aead_id`) are the fixed prefix. Changing the password replaces only the slot (new salt, new nonce, re-wrapped VK); the body bytes `109..` are untouched.
 
 ## Encryption
 - `wrapped_vk` = XChaCha20-Poly1305(KEK, `wrap_nonce`, VK) with **AAD = bytes `0..61`** — authenticates version, algorithm ids, KDF parameters, salt and nonce, so tampering with or downgrading them makes unwrapping fail.
@@ -37,6 +37,8 @@ Header = bytes `0..137`. `body_len` must equal the remaining file length exactly
 Writers: `memory ≥ 19456 KiB`, `iterations ≥ 2`, `lanes ≥ 1` (OWASP minimums), tuned per device to about one second. Readers treat the header as untrusted and reject `memory > 1048576 KiB (1 GiB)`, `iterations > 20`, `lanes > 16`, and anything below the writer minimums.
 
 ## Payload (CBOR, RFC 8949; text keys)
+Encoding is deterministic: map keys are written in ascending (bytewise) order, which is what the golden vector pins. Unknown fields are written back in the same ordering.
+
 ```
 { "v": 1,
   "created_at": <unix ms>, "updated_at": <unix ms>,

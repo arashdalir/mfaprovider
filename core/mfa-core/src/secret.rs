@@ -23,6 +23,16 @@ impl fmt::Debug for Secret {
     }
 }
 
+impl PartialEq for Secret {
+    /// Compares in time independent of where the bytes first differ.
+    fn eq(&self, other: &Self) -> bool {
+        let (a, b) = (self.as_bytes(), other.as_bytes());
+        a.len() == b.len() && a.iter().zip(b).fold(0_u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    }
+}
+
+impl Eq for Secret {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -33,6 +43,13 @@ mod tests {
         let printed = format!("{secret:?} {secret:#?}");
         assert!(!printed.contains("supersecretseed"));
         assert!(printed.contains("redacted"));
+    }
+
+    #[test]
+    fn equality_compares_length_and_content() {
+        assert_eq!(Secret::new(vec![1, 2, 3]), Secret::new(vec![1, 2, 3]));
+        assert_ne!(Secret::new(vec![1, 2, 3]), Secret::new(vec![1, 2, 4]));
+        assert_ne!(Secret::new(vec![1, 2, 3]), Secret::new(vec![1, 2]));
     }
 
     #[test]
