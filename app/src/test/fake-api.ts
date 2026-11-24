@@ -7,6 +7,7 @@ export function fakeApi(overrides: Partial<VaultApi> = {}): VaultApi {
   const resolved = () => vi.fn().mockResolvedValue(undefined);
   return {
     vaultStatus: vi.fn().mockResolvedValue({ exists: true, unlocked: false }),
+    listOtpTypes: vi.fn().mockResolvedValue([]),
     createVault: resolved(),
     unlock: resolved(),
     lock: resolved(),

@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "allow-vault-status",
+    "allow-list-otp-types",
     "allow-create-vault",
     "allow-unlock",
     "allow-lock",

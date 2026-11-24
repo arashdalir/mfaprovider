@@ -4,6 +4,7 @@ use tauri_build::{AppManifest, Attributes};
 /// `capabilities/default.json` (a test checks this).
 const COMMANDS: &[&str] = &[
     "vault_status",
+    "list_otp_types",
     "create_vault",
     "unlock",
     "lock",

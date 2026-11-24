@@ -6,7 +6,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use mfa_storage::FileStorage;
 use tauri::State;
 
-use super::dto::{EntryChangesRequest, EntryView, NewEntryRequest, RevealedSecret, VaultStatus};
+use super::dto::{
+    EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView, RevealedSecret, VaultStatus,
+};
 use super::error::{IpcError, IpcErrorCode};
 use super::service::VaultService;
 use crate::platform::{OsRng, SystemClock, tuned_kdf_params};
@@ -35,6 +37,11 @@ impl AppState {
 #[tauri::command]
 pub async fn vault_status(state: State<'_, AppState>) -> Result<VaultStatus, IpcError> {
     state.service().status()
+}
+
+#[tauri::command]
+pub async fn list_otp_types(state: State<'_, AppState>) -> Result<Vec<OtpTypeView>, IpcError> {
+    Ok(state.service().otp_types())
 }
 
 #[tauri::command]

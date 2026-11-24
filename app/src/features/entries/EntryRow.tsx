@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { EntryView } from "@/ipc/client";
@@ -11,12 +11,20 @@ export interface EntryRowProps {
   entry: EntryView;
   onCopy: (code: string) => void;
   onNextCode: () => void;
+  onEdit: () => void;
   /** Absent while the list is filtered, when moving would be ambiguous. */
   onMoveUp?: () => void;
   onMoveDown?: () => void;
 }
 
-export function EntryRow({ entry, onCopy, onNextCode, onMoveUp, onMoveDown }: EntryRowProps) {
+export function EntryRow({
+  entry,
+  onCopy,
+  onNextCode,
+  onEdit,
+  onMoveUp,
+  onMoveDown,
+}: EntryRowProps) {
   const title = `${entry.issuer} · ${entry.account}`;
   return (
     <li className="flex items-center gap-2 rounded-lg border p-3">
@@ -24,6 +32,9 @@ export function EntryRow({ entry, onCopy, onNextCode, onMoveUp, onMoveDown }: En
         <p className="truncate text-sm text-muted-foreground">{title}</p>
         <CodeArea entry={entry} title={title} onCopy={onCopy} onNextCode={onNextCode} />
       </div>
+      <Button variant="ghost" size="icon" aria-label={`Edit ${title}`} onClick={onEdit}>
+        <Pencil />
+      </Button>
       <div className="flex flex-col">
         <Button
           variant="ghost"

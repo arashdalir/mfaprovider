@@ -7,6 +7,7 @@ import type { EntryView } from "./generated/EntryView";
 import type { IpcError } from "./generated/IpcError";
 import type { IpcErrorCode } from "./generated/IpcErrorCode";
 import type { NewEntryRequest } from "./generated/NewEntryRequest";
+import type { OtpTypeView } from "./generated/OtpTypeView";
 import type { RevealedSecret } from "./generated/RevealedSecret";
 import type { VaultStatus } from "./generated/VaultStatus";
 
@@ -15,6 +16,9 @@ export type {
 } from "./generated/CodeState";
 export type { EntryChangesRequest, EntryView, IpcError, IpcErrorCode, NewEntryRequest };
 export type { RevealedSecret, VaultStatus };
+export type { OtpTypeView };
+export type { ParamKindView } from "./generated/ParamKindView";
+export type { ParamSpecView } from "./generated/ParamSpecView";
 
 /** What a rejected command call becomes; `code` is the stable, switchable part. */
 export class IpcCallError extends Error {
@@ -48,6 +52,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 
 export const ipc = {
   vaultStatus: () => call<VaultStatus>("vault_status"),
+  listOtpTypes: () => call<OtpTypeView[]>("list_otp_types"),
   createVault: (password: string) => call<void>("create_vault", { password }),
   unlock: (password: string) => call<void>("unlock", { password }),
   lock: () => call<void>("lock"),

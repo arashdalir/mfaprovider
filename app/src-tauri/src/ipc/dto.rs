@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use mfa_core::otp::Params;
+use mfa_core::otp::{OtpRegistry, ParamKind, ParamSpec, Params};
 use mfa_core::secret::Secret;
 use mfa_core::vault::{CodeOutcome, Entry, EntryChanges, EntryCode, EntryId, NewEntry, VaultData};
 use serde::{Deserialize, Serialize};
@@ -47,6 +47,8 @@ pub struct EntryView {
     pub icon: Option<String>,
     pub tags: Vec<String>,
     pub notes: String,
+    /// Algorithm, digits, period, counter… — settings, not secrets.
+    pub params: BTreeMap<String, String>,
     #[ts(type = "number")]
     pub created_at_ms: i64,
     #[ts(type = "number")]
@@ -96,6 +98,66 @@ impl RevealedSecret {
     }
 }
 
+#[derive(Debug, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum ParamKindView {
+    /// Bounds are limited to what fits in 32 bits, which no real parameter exceeds.
+    Integer {
+        min: u32,
+        max: u32,
+    },
+    Choice {
+        choices: Vec<String>,
+    },
+}
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct ParamSpecView {
+    pub name: String,
+    pub kind: ParamKindView,
+    pub default: String,
+}
+
+/// An OTP type the UI can offer, with the parameters its form should ask for.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct OtpTypeView {
+    pub id: String,
+    pub params: Vec<ParamSpecView>,
+}
+
+pub fn otp_type_views(registry: &OtpRegistry) -> Vec<OtpTypeView> {
+    registry
+        .types()
+        .into_iter()
+        .map(|otp_type| OtpTypeView {
+            id: otp_type.id().to_owned(),
+            params: otp_type.schema().iter().map(ParamSpecView::from).collect(),
+        })
+        .collect()
+}
+
+impl From<&ParamSpec> for ParamSpecView {
+    fn from(spec: &ParamSpec) -> Self {
+        let kind = match spec.kind {
+            ParamKind::Integer { min, max } => ParamKindView::Integer {
+                min: saturating_u32(min),
+                max: saturating_u32(max),
+            },
+            ParamKind::Choice(choices) => ParamKindView::Choice {
+                choices: choices.iter().map(|choice| (*choice).to_owned()).collect(),
+            },
+        };
+        Self {
+            name: spec.name.to_owned(),
+            kind,
+            default: spec.default.to_owned(),
+        }
+    }
+}
+
 pub fn entry_views(data: &VaultData, codes: Vec<EntryCode>) -> Vec<EntryView> {
     data.entries
         .iter()
@@ -114,6 +176,11 @@ impl EntryView {
             icon: entry.icon.clone(),
             tags: entry.tags.clone(),
             notes: entry.notes.clone(),
+            params: entry
+                .params
+                .iter()
+                .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                .collect(),
             created_at_ms: entry.created_at,
             updated_at_ms: entry.updated_at,
             code: CodeState::from(outcome),
@@ -259,6 +326,22 @@ mod tests {
     }
 
     #[test]
+    fn a_view_carries_the_entry_parameters() {
+        let (mut data, id) = sample();
+        let changes = EntryChanges {
+            params: Some(Params::new().with("digits", "8").with("period", "60")),
+            ..EntryChanges::default()
+        };
+        data.edit_entry(id, changes, &OtpRegistry::with_builtins(), 2)
+            .unwrap();
+        let json = serde_json::to_value(&views_at(&data, 0)[0]).unwrap();
+        assert_eq!(
+            json["params"],
+            serde_json::json!({ "digits": "8", "period": "60" })
+        );
+    }
+
+    #[test]
     fn timestamps_are_sent_as_json_numbers() {
         let (data, _) = sample();
         let json = serde_json::to_value(&views_at(&data, 0)[0]).unwrap();
@@ -324,6 +407,52 @@ mod tests {
         assert_eq!(change(Some("i"), false), Some(Some("i".to_owned())));
         assert_eq!(change(Some("i"), true), Some(None));
         assert_eq!(change(None, true), Some(None));
+    }
+
+    #[test]
+    fn otp_types_expose_their_parameter_schema() {
+        let views = otp_type_views(&OtpRegistry::with_builtins());
+        let ids: Vec<_> = views.iter().map(|view| view.id.as_str()).collect();
+        assert_eq!(ids, ["hotp", "steam", "totp"]);
+        let totp = views.iter().find(|view| view.id == "totp").unwrap();
+        let period = totp.params.iter().find(|p| p.name == "period").unwrap();
+        assert!(matches!(
+            period.kind,
+            ParamKindView::Integer { min: 1, max: 3600 }
+        ));
+        assert_eq!(period.default, "30");
+        let algorithm = totp.params.iter().find(|p| p.name == "algorithm").unwrap();
+        assert!(
+            matches!(&algorithm.kind, ParamKindView::Choice { choices } if choices == &["SHA1", "SHA256", "SHA512"])
+        );
+        assert_eq!(
+            views
+                .iter()
+                .find(|view| view.id == "steam")
+                .unwrap()
+                .params
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn huge_integer_bounds_saturate_instead_of_breaking_typescript() {
+        let hotp = otp_type_views(&OtpRegistry::with_builtins())
+            .into_iter()
+            .find(|view| view.id == "hotp")
+            .unwrap();
+        let counter = hotp.params.iter().find(|p| p.name == "counter").unwrap();
+        assert!(matches!(
+            counter.kind,
+            ParamKindView::Integer {
+                min: 0,
+                max: u32::MAX
+            }
+        ));
+        let json = serde_json::to_value(counter).unwrap();
+        assert_eq!(json["kind"]["max"], serde_json::json!(u32::MAX));
+        assert_eq!(json["kind"]["kind"], "integer");
     }
 
     #[test]

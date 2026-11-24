@@ -31,6 +31,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::vault_status,
+            commands::list_otp_types,
             commands::create_vault,
             commands::unlock,
             commands::lock,

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { useApi } from "@/ipc/api-context";
+import type { EntryView } from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
 
 import { copyWithAutoClear } from "./clipboard";
@@ -10,8 +11,10 @@ import { allTags, filterEntries } from "./filter";
 import { useEntries } from "./useEntries";
 
 export function EntryList({
+  onEdit,
   copy = copyWithAutoClear,
 }: {
+  onEdit: (entry: EntryView) => void;
   copy?: (text: string) => Promise<void>;
 }) {
   const api = useApi();
@@ -91,6 +94,7 @@ export function EntryList({
                 entry={entry}
                 onCopy={(code) => void run(() => copy(code), "Code copied. It will be cleared shortly.")}
                 onNextCode={() => void run(() => api.advanceCounter(entry.id))}
+                onEdit={() => onEdit(entry)}
                 onMoveUp={
                   canMove && position > 0
                     ? () => void run(() => api.moveEntry(entry.id, position - 1))

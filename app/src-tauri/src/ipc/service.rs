@@ -6,8 +6,8 @@ use mfa_core::vault::{
 };
 
 use super::dto::{
-    EntryChangesRequest, EntryView, NewEntryRequest, RevealedSecret, VaultStatus, entry_views,
-    parse_entry_id,
+    EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView, RevealedSecret, VaultStatus,
+    entry_views, otp_type_views, parse_entry_id,
 };
 use super::error::{IpcError, IpcErrorCode};
 
@@ -40,6 +40,11 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
 
     pub fn unlock(&mut self, password: &str) -> Result<(), IpcError> {
         Ok(self.session.unlock(password)?)
+    }
+
+    /// The OTP types a form can offer; needs no unlocked vault.
+    pub fn otp_types(&self) -> Vec<OtpTypeView> {
+        otp_type_views(&self.registry)
     }
 
     pub fn lock(&mut self) {
@@ -221,6 +226,12 @@ mod tests {
                 unlocked: false
             }
         );
+    }
+
+    #[test]
+    fn otp_types_are_available_even_while_locked() {
+        let (service, _, _) = service();
+        assert_eq!(service.otp_types().len(), 3);
     }
 
     #[test]

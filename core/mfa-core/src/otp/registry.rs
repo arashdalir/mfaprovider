@@ -44,6 +44,14 @@ impl OtpRegistry {
     pub fn get(&self, id: &str) -> Option<&dyn OtpType> {
         self.types.get(id).map(Box::as_ref)
     }
+
+    /// Every registered OTP type, ordered by id.
+    #[must_use]
+    pub fn types(&self) -> Vec<&dyn OtpType> {
+        let mut all: Vec<&dyn OtpType> = self.types.values().map(Box::as_ref).collect();
+        all.sort_by_key(|otp_type| otp_type.id());
+        all
+    }
 }
 
 #[cfg(test)]
@@ -78,6 +86,14 @@ mod tests {
         assert_eq!(registry.get("totp").map(OtpType::id), Some("totp"));
         assert_eq!(registry.get("hotp").map(OtpType::id), Some("hotp"));
         assert_eq!(registry.get("steam").map(OtpType::id), Some("steam"));
+    }
+
+    #[test]
+    fn types_lists_everything_registered_in_id_order() {
+        let mut registry = OtpRegistry::with_builtins();
+        registry.register(Box::new(Fake)).unwrap();
+        let ids: Vec<_> = registry.types().into_iter().map(OtpType::id).collect();
+        assert_eq!(ids, ["fake", "hotp", "steam", "totp"]);
     }
 
     #[test]

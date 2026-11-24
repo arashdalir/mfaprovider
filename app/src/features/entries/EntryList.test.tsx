@@ -16,6 +16,7 @@ function entry(overrides: Partial<EntryView> & { id: string }): EntryView {
     icon: null,
     tags: [],
     notes: "",
+    params: {},
     created_at_ms: 0,
     updated_at_ms: 0,
     code: { state: "ready", text: "482913", period_seconds: 30, seconds_remaining: 12 },
@@ -38,14 +39,19 @@ const steam = entry({
   code: { state: "ready", text: "K7P2N", period_seconds: 30, seconds_remaining: 20 },
 });
 
-function show(entries: EntryView[], overrides: Partial<VaultApi> = {}, copy = vi.fn().mockResolvedValue(undefined)) {
+function show(
+  entries: EntryView[],
+  overrides: Partial<VaultApi> = {},
+  copy = vi.fn().mockResolvedValue(undefined),
+  onEdit = vi.fn(),
+) {
   const api = fakeApi({ listEntries: vi.fn().mockResolvedValue(entries), ...overrides });
   render(
     <ApiContext.Provider value={api}>
-      <EntryList copy={copy} />
+      <EntryList copy={copy} onEdit={onEdit} />
     </ApiContext.Provider>,
   );
-  return { api, copy };
+  return { api, copy, onEdit };
 }
 
 afterEach(() => {
@@ -60,6 +66,12 @@ describe("EntryList", () => {
     const bar = screen.getByRole("progressbar", { name: "Time left for GitHub · alice" });
     expect(bar).toHaveAttribute("aria-valuenow", "12");
     expect(bar).toHaveAttribute("aria-valuemax", "30");
+  });
+
+  it("asks to edit the chosen account", async () => {
+    const { onEdit } = show([github, google]);
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Google · bob" }));
+    expect(onEdit).toHaveBeenCalledWith(google);
   });
 
   it("says when there are no accounts", async () => {

@@ -15,6 +15,7 @@ function entry(issuer: string, account: string, tags: string[] = []): EntryView 
     icon: null,
     tags,
     notes: "",
+    params: {},
     created_at_ms: 0,
     updated_at_ms: 0,
     code: { state: "unsupported" },
