@@ -25,5 +25,7 @@ Parse `otpauth://` URIs (TOTP/HOTP/Steam variants) into entries, decode QR codes
 
 - 2026-11-24: Done: `NewEntry::validate` (core), `mfa-formats` crate with `parse_otpauth` (24 tests: Google example, missing/encoded/unicode labels, issuer precedence, algorithm/digits/period, HOTP counter incl. u64 max, Steam, case-insensitivity, lenient secrets, unsupported type, bad params via core validation, duplicates, malformed/oversized input, multibyte scheme check, errors never contain the secret). Clippy, workspace tests, cargo-deny green locally.
 
+- 2026-11-24: Wrote ADR-0013 (proposed): `rqrr` + `png` + `zune-jpeg` used directly (not `image`, not `rxing`, not a JS decoder), PNG/JPEG only, limits 10 MiB / 8192 px per side / 25 Mpx / 128 MiB PNG memory / 16 codes. Waiting for user review.
+
 ## Next step
-Write ADR-0013 (QR image decoding: crate choice for PNG/JPEG decode + QR detection, dependency footprint via cargo-deny, hostile-input limits: file size, pixel count, decode time) as proposed, for the user to review before any image dependency is added. Then QR decoding, then shell commands + UI (paste URI, image file, manual entry).
+User reviews ADR-0013. After acceptance: add the three dependencies, implement `decode_qr_image` test-first (hostile-input tests listed in the ADR), then shell commands + UI (paste URI, image file, manual entry).
