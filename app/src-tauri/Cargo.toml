@@ -20,6 +20,14 @@ mfa-core = { path = "../../core/mfa-core", version = "0.0.0" }
 mfa-storage = { path = "../../core/mfa-storage", version = "0.0.0" }
 serde = { version = "1", features = ["derive"] }
 ts-rs = { version = "12", default-features = false, features = ["serde-compat"] }
+getrandom = "0.4.3"
 
 [dev-dependencies]
 serde_json = "1"
+
+# Key derivation is slow unoptimised; keep unlock-heavy tests fast.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3

@@ -90,6 +90,15 @@ pub(super) fn derive_key(
     Ok(key)
 }
 
+/// Runs one derivation with `params` on a fixed dummy password, so the caller can time it
+/// and feed the result to [`tune_kdf_params`]. Touches no vault data.
+///
+/// # Errors
+/// If Argon2 rejects the parameters.
+pub fn run_kdf_benchmark(params: KdfParams) -> Result<(), VaultError> {
+    derive_key("benchmark", &[0_u8; SALT_LENGTH], params).map(|_| ())
+}
+
 /// Picks parameters whose derivation takes at least `target` on this device.
 ///
 /// Doubles memory first (up to `max_memory_kib`, itself clamped to the format limits),
@@ -180,6 +189,16 @@ mod tests {
     }
 
     /// Fake clock: one derivation takes memory (KiB) × iterations microseconds.
+    #[test]
+    fn the_benchmark_runs_with_valid_parameters_and_rejects_invalid_ones() {
+        assert_eq!(run_kdf_benchmark(KdfParams::MINIMUM), Ok(()));
+        let invalid = KdfParams {
+            memory_kib: 1,
+            ..KdfParams::MINIMUM
+        };
+        assert!(run_kdf_benchmark(invalid).is_err());
+    }
+
     fn fake_cost(params: KdfParams) -> Duration {
         Duration::from_micros(u64::from(params.memory_kib()) * u64::from(params.iterations()))
     }

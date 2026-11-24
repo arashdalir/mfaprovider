@@ -10,11 +10,11 @@ Core operations on an unlocked vault (add, edit, delete with tombstone, reorder,
 
 ## Acceptance criteria
 - [x] Core: add/edit/delete/reorder/tag/search with tests; deletes create tombstones
-- [ ] `list_entries` returns metadata + current code + seconds remaining; no secret field exists in any IPC type
-- [ ] Explicit reveal/edit flow behind re-authentication, wiped after use
-- [ ] IPC types generated from Rust (specta/ts-rs) and checked in CI for drift
-- [ ] Tauri capabilities list only the commands in use
-- [ ] Rust unit tests + a test proving serialised IPC payloads contain no secret material
+- [x] `list_entries` returns metadata + current code + seconds remaining; no secret field exists in any IPC type
+- [x] Explicit reveal/edit flow behind re-authentication (backend; seed returned as a string, so JS-side wiping is best-effort — see notes)
+- [x] IPC types generated from Rust (ts-rs, ADR-0012) and checked in CI for drift
+- [x] Tauri capabilities list only the commands in use
+- [x] Rust unit tests + a test proving serialised IPC payloads contain no secret material
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-17: Depends on: 0003, 0006. Blocks 0008, 0009, 0010, 0011. Choice of type-generation crate (specta vs ts-rs) is an ADR-worthy decision; write it before coding.
@@ -36,5 +36,8 @@ Core operations on an unlocked vault (add, edit, delete with tombstone, reorder,
 - 2026-11-24: **Clarification of ADR-0012 point 2 (not a change):** "no secret field on any DTO" applies to data sent *to* the UI. Seeds also travel *from* the UI in `NewEntryRequest` and `EntryChangesRequest` (`secret_base32`, the user typing/scanning it in); the tripwire allows exactly those fields plus `RevealedSecret`.
 - 2026-11-24: Still to do: Tauri commands + app state (production Clock/Rng, re-auth for reveal), typed `client.ts` + lint rule + command-name test, capabilities.
 
+- 2026-11-24: Done: 13 Tauri commands (`ipc/commands.rs`, thin async wrappers over `ipc/service.rs`, 15 service tests), `platform.rs` (SystemClock, OsRng via `getrandom` 0.4, KDF tuning: target 500 ms, memory cap 256 MiB — device-tuned at vault creation and password change, stored in the file), core `verify_password` + `run_kdf_benchmark`, idle ticker thread, app manifest + capability listing exactly the commands (a test keeps commands.rs, lib.rs handler list, build.rs and capabilities identical), `client.ts` (one module calls `invoke`; oxlint `no-restricted-imports` verified to reject a rogue import; vitest checks client command names against commands.rs, verified to fail on a typo). Counts: core 147, shell 45, UI 8.
+- 2026-11-24: Honest limits: (1) the commands and `setup` hook (app data dir, ticker thread) are compiled and unit-tested via the service but **not yet exercised in a running app** — TASK-0008 is the first real caller; (2) `reveal_secret` returns the seed as a JS string, which cannot be wiped — the UI must show it briefly and drop references; (3) no unlock rate limiting on desktop (Argon2 cost only); (4) backgrounded/suspend events are not yet wired to `notify` (TASK-0012 for Android; desktop keeps idle lock only); (5) `change_password` and `reveal_secret` are not rate-limited either.
+
 ## Next step
-Tauri commands and app state in `app/src-tauri/src/` (unlock, lock, create, list_entries, add/edit/delete/move, reveal behind re-auth, advance_counter), production Clock/Rng (add `getrandom`), then `app/src/ipc/client.ts` + lint rule + command-name test, then capabilities.
+Wait for CI on the pushed commits; then close TASK-0007 (move to `done/`, set Status done) — or, if the user prefers, first smoke-run the real app (`pnpm tauri dev`) to exercise the commands. Next task: TASK-0008 (UI).

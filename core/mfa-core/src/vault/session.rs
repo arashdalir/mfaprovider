@@ -287,6 +287,23 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
         Self::persist(unlocked, &mut self.storage, &mut self.rng)
     }
 
+    /// Checks `password` against the stored vault without changing anything, for actions that
+    /// need the user to prove presence again (such as revealing a seed). Success counts as
+    /// user activity.
+    ///
+    /// # Errors
+    /// [`SessionError::Locked`]; [`VaultError::UnwrapFailed`] for a wrong password.
+    pub fn verify_password(&mut self, password: &str) -> Result<(), SessionError> {
+        self.enforce_idle_timeout();
+        if self.unlocked.is_none() {
+            return Err(SessionError::Locked);
+        }
+        let file = self.storage.read()?.ok_or(SessionError::NoVault)?;
+        container::open(password, &file)?;
+        self.record_activity();
+        Ok(())
+    }
+
     /// Changes the master password. The current password is checked again, so an unlocked
     /// but unattended session cannot silently change it. Entries are not re-encrypted:
     /// only the key slot is replaced.
@@ -726,6 +743,23 @@ mod tests {
             .params
             .get("counter");
         assert_eq!(counter, Some("1"));
+    }
+
+    #[test]
+    fn verifying_the_password_checks_it_without_writing_and_counts_as_activity() {
+        let (mut session, storage, clock) = created(short_idle());
+        let before = storage.bytes();
+        assert_eq!(
+            session.verify_password("wrong"),
+            Err(SessionError::Vault(VaultError::UnwrapFailed))
+        );
+        clock.advance_secs(50);
+        session.verify_password(PASSWORD).unwrap();
+        clock.advance_secs(50);
+        assert!(session.is_unlocked(), "a successful check is activity");
+        assert_eq!(storage.bytes(), before);
+        session.lock();
+        assert_eq!(session.verify_password(PASSWORD), Err(SessionError::Locked));
     }
 
     #[test]

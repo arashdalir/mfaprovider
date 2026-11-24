@@ -3,6 +3,27 @@
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@tauri-apps/api",
+            "message": "Call the core through src/ipc/client.ts only (ADR-0012)."
+          },
+          {
+            "name": "@tauri-apps/api/core",
+            "message": "Call the core through src/ipc/client.ts only (ADR-0012)."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/ipc/client.ts"],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ]
 }

@@ -15,6 +15,13 @@ use ts_rs::TS;
 
 use super::error::IpcError;
 
+#[derive(Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct VaultStatus {
+    pub exists: bool,
+    pub unlocked: bool,
+}
+
 #[derive(Debug, Serialize, TS)]
 #[serde(tag = "state", rename_all = "snake_case")]
 #[ts(export)]
