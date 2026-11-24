@@ -71,3 +71,56 @@ impl Rng for CountingRng {
         }
     }
 }
+
+use std::cell::Cell;
+use std::rc::Rc;
+
+use super::clock::Clock;
+
+/// Test clock whose handles share one time; `advance` moves wall-clock and monotonic time together.
+#[derive(Clone)]
+pub(crate) struct FakeClock(Rc<Cell<u64>>);
+
+impl FakeClock {
+    pub(crate) const START_UNIX_MS: u64 = 1_700_000_000_000;
+
+    pub(crate) fn new() -> Self {
+        Self(Rc::new(Cell::new(0)))
+    }
+
+    pub(crate) fn advance_ms(&self, milliseconds: u64) {
+        self.0.set(self.0.get() + milliseconds);
+    }
+
+    pub(crate) fn advance_secs(&self, seconds: u64) {
+        self.advance_ms(seconds * 1000);
+    }
+}
+
+impl Clock for FakeClock {
+    fn unix_ms(&self) -> i64 {
+        i64::try_from(Self::START_UNIX_MS + self.0.get()).expect("fits in i64")
+    }
+
+    fn monotonic_ms(&self) -> u64 {
+        self.0.get()
+    }
+}
+
+/// A small TOTP entry whose id and account derive from `number`.
+pub(crate) fn entry(number: u8) -> Entry {
+    Entry {
+        id: id(number),
+        otp_type: "totp".into(),
+        issuer: "Example".into(),
+        account: format!("user{number}@example.com"),
+        secret: Secret::new(vec![number; 20]),
+        params: Params::new(),
+        icon: None,
+        tags: Vec::new(),
+        notes: String::new(),
+        created_at: 0,
+        updated_at: 0,
+        extra: Extra::new(),
+    }
+}
