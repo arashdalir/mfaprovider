@@ -2,20 +2,28 @@
 
 use std::time::Duration;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use mfa_core::otp::OtpRegistry;
 use mfa_core::vault::{
     Clock, EntryChanges, KdfParams, LockPolicy, NewEntry, Rng, Storage, SystemEvent, VaultSession,
 };
 
+use mfa_formats::otpauth::parse_otpauth;
+use mfa_formats::qr::{MAX_FILE_BYTES, decode_qr_image};
+
 use super::dto::{
-    EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView, RevealedSecret, VaultStatus,
-    entry_views, otp_type_views, parse_entry_id,
+    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView,
+    RevealedSecret, VaultStatus, apply_edits, draft_views, entry_views, otp_type_views,
+    parse_entry_id,
 };
 use super::error::{IpcError, IpcErrorCode};
 
 pub struct VaultService<S: Storage, C: Clock, R: Rng> {
     session: VaultSession<S, C, R>,
     registry: OtpRegistry,
+    /// Accounts read from links or QR codes, awaiting confirmation. Dropped when the vault locks.
+    drafts: Vec<NewEntry>,
 }
 
 impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
@@ -23,6 +31,7 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
         Self {
             session: VaultSession::new(storage, clock, rng, LockPolicy::default()),
             registry: OtpRegistry::with_builtins(),
+            drafts: Vec::new(),
         }
     }
 
@@ -66,14 +75,87 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
 
     pub fn lock(&mut self) {
         self.session.lock();
+        self.drafts.clear();
     }
 
     pub fn notify(&mut self, event: SystemEvent) {
         self.session.notify(event);
+        self.drop_drafts_if_locked();
     }
 
     pub fn tick(&mut self) {
         self.session.tick();
+        self.drop_drafts_if_locked();
+    }
+
+    fn drop_drafts_if_locked(&mut self) {
+        if !self.session.is_unlocked() {
+            self.drafts.clear();
+        }
+    }
+
+    fn require_unlocked(&mut self) -> Result<(), IpcError> {
+        self.drop_drafts_if_locked();
+        if self.session.is_unlocked() {
+            Ok(())
+        } else {
+            Err(IpcError::new(IpcErrorCode::Locked))
+        }
+    }
+
+    /// Reads an `otpauth://` link into a draft, replacing any earlier drafts.
+    pub fn draft_from_link(&mut self, text: &str) -> Result<Vec<DraftView>, IpcError> {
+        self.require_unlocked()?;
+        let draft = parse_otpauth(text, &self.registry)?;
+        self.drafts = vec![draft];
+        Ok(draft_views(&self.drafts))
+    }
+
+    /// Reads every authenticator QR code in a PNG or JPEG image (given as base64) into drafts,
+    /// replacing any earlier drafts. Other QR codes in the image are ignored.
+    pub fn draft_from_image(&mut self, image_base64: &str) -> Result<Vec<DraftView>, IpcError> {
+        self.require_unlocked()?;
+        let bytes = decode_base64_image(image_base64)?;
+        let texts = decode_qr_image(&bytes)?;
+        let mut drafts = Vec::new();
+        let mut first_problem = None;
+        for text in texts {
+            match parse_otpauth(&text, &self.registry) {
+                Ok(draft) => drafts.push(draft),
+                Err(error) => {
+                    first_problem.get_or_insert(error);
+                }
+            }
+        }
+        if drafts.is_empty() {
+            return Err(first_problem.map_or_else(
+                || IpcError::invalid_input("the QR code is not an authenticator link"),
+                IpcError::from,
+            ));
+        }
+        self.drafts = drafts;
+        Ok(draft_views(&self.drafts))
+    }
+
+    /// Adds a draft with the user's edits; on success all drafts are dropped.
+    pub fn add_draft(
+        &mut self,
+        draft_id: u32,
+        edits: DraftEditsRequest,
+    ) -> Result<String, IpcError> {
+        self.require_unlocked()?;
+        let draft = usize::try_from(draft_id)
+            .ok()
+            .and_then(|index| self.drafts.get(index))
+            .ok_or(IpcError::new(IpcErrorCode::NotFound))?;
+        let new = apply_edits(draft, edits);
+        let id = self.session.add_entry(new, &self.registry)?.to_string();
+        self.drafts.clear();
+        Ok(id)
+    }
+
+    pub fn discard_drafts(&mut self) {
+        self.drafts.clear();
     }
 
     pub fn record_activity(&mut self) {
@@ -133,6 +215,17 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
         }
         Ok(self.session.change_password(current, new, kdf)?)
     }
+}
+
+/// Base64 text is about a third longer than the bytes it carries; anything that could not
+/// hold an image within the decoder's file-size limit is refused before decoding.
+fn decode_base64_image(text: &str) -> Result<Vec<u8>, IpcError> {
+    if text.len() > MAX_FILE_BYTES / 3 * 4 + 8 {
+        return Err(IpcError::invalid_input("the file is larger than 10 MiB"));
+    }
+    STANDARD
+        .decode(text.trim())
+        .map_err(|_| IpcError::invalid_input("the image could not be read"))
 }
 
 #[cfg(test)]
@@ -512,5 +605,289 @@ mod tests {
             .unwrap();
         service.lock();
         service.unlock("new password").unwrap();
+    }
+
+    const LINK_SECRET: &str = "JBSWY3DPEHPK3PXP";
+
+    fn link(account: &str) -> String {
+        format!("otpauth://totp/Example:{account}?secret={LINK_SECRET}&issuer=Example&digits=8")
+    }
+
+    fn edits(account: &str) -> DraftEditsRequest {
+        DraftEditsRequest {
+            issuer: "Example".into(),
+            account: account.into(),
+            params: [("digits".to_owned(), "8".to_owned())].into(),
+            tags: vec![],
+            notes: String::new(),
+        }
+    }
+
+    /// A PNG of a QR code per text, side by side, as base64.
+    fn qr_png_base64(texts: &[&str]) -> String {
+        let scale = 6;
+        let codes: Vec<_> = texts
+            .iter()
+            .map(|text| qrcode::QrCode::new(text.as_bytes()).unwrap())
+            .collect();
+        let modules = codes.iter().map(qrcode::QrCode::width).max().unwrap();
+        let cell = modules + 8;
+        let (width, height) = (cell * scale * codes.len(), cell * scale);
+        let mut pixels = vec![255_u8; width * height];
+        for (index, code) in codes.iter().enumerate() {
+            let colours = code.to_colors();
+            for y in 0..height {
+                for x in 0..cell * scale {
+                    let (mx, my) = (x / scale, y / scale);
+                    let inside =
+                        (4..code.width() + 4).contains(&mx) && (4..code.width() + 4).contains(&my);
+                    if inside && colours[(my - 4) * code.width() + (mx - 4)] == qrcode::Color::Dark
+                    {
+                        pixels[y * width + index * cell * scale + x] = 0;
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        let mut encoder = png::Encoder::new(
+            &mut out,
+            u32::try_from(width).unwrap(),
+            u32::try_from(height).unwrap(),
+        );
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&pixels)
+            .unwrap();
+        STANDARD.encode(out)
+    }
+
+    #[test]
+    fn a_pasted_link_becomes_a_draft_without_its_secret() {
+        let (mut service, _, _) = unlocked();
+        let drafts = service.draft_from_link(&link("alice")).unwrap();
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(
+            (
+                drafts[0].draft_id,
+                drafts[0].otp_type.as_str(),
+                drafts[0].account.as_str()
+            ),
+            (0, "totp", "alice")
+        );
+        assert_eq!(
+            drafts[0].params.get("digits").map(String::as_str),
+            Some("8")
+        );
+        let json = serde_json::to_string(&drafts).unwrap();
+        let hex: String = b"Hello!\xde\xad\xbe\xef"
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert!(!json.contains(LINK_SECRET) && !json.contains(&hex));
+    }
+
+    #[test]
+    fn adding_a_draft_stores_the_secret_from_the_link_and_the_users_edits() {
+        let (mut service, _, _) = unlocked();
+        service.draft_from_link(&link("alice")).unwrap();
+        let id = service
+            .add_draft(
+                0,
+                DraftEditsRequest {
+                    tags: vec!["work".into()],
+                    ..edits("alice renamed")
+                },
+            )
+            .unwrap();
+        let views = service.list_entries().unwrap();
+        assert_eq!(views.len(), 1);
+        assert_eq!(
+            (views[0].id.as_str(), views[0].account.as_str()),
+            (id.as_str(), "alice renamed")
+        );
+        assert_eq!(views[0].tags, ["work"]);
+        assert_eq!(
+            service
+                .reveal_secret(&id, PASSWORD)
+                .ok()
+                .unwrap()
+                .secret_base32,
+            LINK_SECRET
+        );
+    }
+
+    #[test]
+    fn a_rejected_edit_keeps_the_draft_for_another_try() {
+        let (mut service, _, _) = unlocked();
+        service.draft_from_link(&link("alice")).unwrap();
+        let bad = DraftEditsRequest {
+            params: [("digits".to_owned(), "99".to_owned())].into(),
+            ..edits("alice")
+        };
+        assert_eq!(
+            service.add_draft(0, bad).unwrap_err().code,
+            IpcErrorCode::InvalidInput
+        );
+        assert!(service.add_draft(0, edits("alice")).is_ok());
+    }
+
+    #[test]
+    fn a_draft_can_be_added_only_once_and_unknown_drafts_are_not_found() {
+        let (mut service, _, _) = unlocked();
+        service.draft_from_link(&link("alice")).unwrap();
+        assert_eq!(
+            service.add_draft(5, edits("x")).unwrap_err().code,
+            IpcErrorCode::NotFound
+        );
+        service.add_draft(0, edits("alice")).unwrap();
+        assert_eq!(
+            service.add_draft(0, edits("alice")).unwrap_err().code,
+            IpcErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn a_new_draft_replaces_the_old_one_and_discarding_drops_it() {
+        let (mut service, _, _) = unlocked();
+        service.draft_from_link(&link("first")).unwrap();
+        let second = service.draft_from_link(&link("second")).unwrap();
+        assert_eq!(second[0].account, "second");
+        service.discard_drafts();
+        assert_eq!(
+            service.add_draft(0, edits("x")).unwrap_err().code,
+            IpcErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn drafts_do_not_survive_locking_or_the_idle_lock() {
+        let (mut service, _, clock) = unlocked();
+        service.draft_from_link(&link("alice")).unwrap();
+        service.lock();
+        service.unlock(PASSWORD).unwrap();
+        assert_eq!(
+            service.add_draft(0, edits("x")).unwrap_err().code,
+            IpcErrorCode::NotFound
+        );
+
+        service.draft_from_link(&link("alice")).unwrap();
+        clock.advance_secs(301);
+        service.tick();
+        service.unlock(PASSWORD).unwrap();
+        assert_eq!(
+            service.add_draft(0, edits("x")).unwrap_err().code,
+            IpcErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn draft_operations_need_an_unlocked_vault() {
+        let (mut service, _, _) = unlocked();
+        service.lock();
+        let locked = IpcErrorCode::Locked;
+        assert_eq!(
+            service.draft_from_link(&link("a")).unwrap_err().code,
+            locked
+        );
+        assert_eq!(service.draft_from_image("AAAA").unwrap_err().code, locked);
+        assert_eq!(service.add_draft(0, edits("a")).unwrap_err().code, locked);
+    }
+
+    #[test]
+    fn a_bad_link_is_explained_without_repeating_its_secret() {
+        let (mut service, _, _) = unlocked();
+        let error = service
+            .draft_from_link("otpauth://totp/me?secret=ZZtopSECRETvalue123")
+            .unwrap_err();
+        assert_eq!(error.code, IpcErrorCode::InvalidInput);
+        assert!(!error.message.unwrap().contains("ZZtopSECRETvalue123"));
+        assert_eq!(
+            service
+                .draft_from_link("hello")
+                .unwrap_err()
+                .message
+                .as_deref(),
+            Some("this is not an otpauth:// link")
+        );
+    }
+
+    #[test]
+    fn a_qr_image_becomes_drafts() {
+        let (mut service, _, _) = unlocked();
+        let drafts = service
+            .draft_from_image(&qr_png_base64(&[&link("alice")]))
+            .unwrap();
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(drafts[0].account, "alice");
+        let id = service.add_draft(0, edits("alice")).unwrap();
+        assert_eq!(
+            service
+                .reveal_secret(&id, PASSWORD)
+                .ok()
+                .unwrap()
+                .secret_base32,
+            LINK_SECRET
+        );
+    }
+
+    #[test]
+    fn several_codes_in_one_image_give_several_drafts_and_other_codes_are_ignored() {
+        let (mut service, _, _) = unlocked();
+        let image = qr_png_base64(&[
+            &link("alice"),
+            "https://example.com/not-a-link",
+            &link("bob"),
+        ]);
+        let drafts = service.draft_from_image(&image).unwrap();
+        let mut accounts: Vec<_> = drafts.iter().map(|d| d.account.as_str()).collect();
+        accounts.sort_unstable();
+        assert_eq!(accounts, ["alice", "bob"]);
+        assert_eq!(
+            drafts.iter().map(|d| d.draft_id).collect::<Vec<_>>(),
+            [0, 1]
+        );
+    }
+
+    #[test]
+    fn an_image_whose_only_code_is_not_a_link_is_refused_with_the_links_own_complaint() {
+        let (mut service, _, _) = unlocked();
+        let error = service
+            .draft_from_image(&qr_png_base64(&["https://example.com"]))
+            .unwrap_err();
+        assert_eq!(
+            error.message.as_deref(),
+            Some("this is not an otpauth:// link")
+        );
+    }
+
+    #[test]
+    fn unreadable_images_are_refused_with_readable_messages() {
+        let (mut service, _, _) = unlocked();
+        let message = |service: &mut TestService, text: &str| {
+            service.draft_from_image(text).unwrap_err().message.unwrap()
+        };
+        assert_eq!(
+            message(&mut service, "not base64 !!"),
+            "the image could not be read"
+        );
+        assert_eq!(
+            message(&mut service, &STANDARD.encode(b"plain text")),
+            "the file is not a PNG or JPEG image"
+        );
+        assert_eq!(
+            message(&mut service, &"A".repeat(20_000_000)),
+            "the file is larger than 10 MiB"
+        );
+    }
+
+    #[test]
+    fn a_failed_image_keeps_the_earlier_drafts() {
+        let (mut service, _, _) = unlocked();
+        service.draft_from_link(&link("alice")).unwrap();
+        assert!(service.draft_from_image("garbage!!").is_err());
+        assert!(service.add_draft(0, edits("alice")).is_ok());
     }
 }

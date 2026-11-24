@@ -43,10 +43,10 @@ describe("OpenVault", () => {
     expect(onLock).toHaveBeenCalled();
   });
 
-  it("opens the add form and returns to the list on cancel", async () => {
+  it("opens the add chooser and returns to the list on cancel", async () => {
     open();
     await userEvent.click(await screen.findByRole("button", { name: "Add account" }));
-    expect(await screen.findByRole("form", { name: "Add account" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Add account" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(await screen.findByText(/GitHub/)).toBeInTheDocument();
   });

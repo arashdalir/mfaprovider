@@ -1,4 +1,6 @@
 import type {
+  DraftEditsRequest,
+  DraftView,
   EntryChangesRequest,
   EntryView,
   NewEntryRequest,
@@ -45,6 +47,29 @@ export function valuesOf(entry: EntryView, types: OtpTypeView[]): FormValues {
     params: { ...defaultParams(type), ...entry.params },
     tags: entry.tags.join(", "),
     notes: entry.notes,
+  };
+}
+
+export function valuesOfDraft(draft: DraftView, types: OtpTypeView[]): FormValues {
+  const type = types.find((candidate) => candidate.id === draft.otp_type);
+  return {
+    otpType: draft.otp_type,
+    issuer: draft.issuer,
+    account: draft.account,
+    secret: "",
+    params: { ...defaultParams(type), ...draft.params },
+    tags: "",
+    notes: "",
+  };
+}
+
+export function toDraftEdits(values: FormValues): DraftEditsRequest {
+  return {
+    issuer: values.issuer,
+    account: values.account,
+    params: values.params,
+    tags: parseTags(values.tags),
+    notes: values.notes,
   };
 }
 

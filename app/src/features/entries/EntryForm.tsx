@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApi } from "@/ipc/api-context";
-import type { EntryView, OtpTypeView, ParamSpecView } from "@/ipc/client";
+import type { DraftView, EntryView, OtpTypeView, ParamSpecView } from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
 
 import { RevealSecret } from "./RevealSecret";
@@ -13,8 +13,10 @@ import {
   defaultParams,
   formProblem,
   toChangesRequest,
+  toDraftEdits,
   toNewEntryRequest,
   valuesOf,
+  valuesOfDraft,
   type FormValues,
 } from "./form-model";
 import { typeLabel } from "./type-labels";
@@ -22,6 +24,8 @@ import { typeLabel } from "./type-labels";
 interface EntryFormProps {
   /** The account to edit; absent when adding. */
   entry?: EntryView;
+  /** An account read from a link or QR code: its secret is already held by the core. */
+  draft?: DraftView;
   onDone: () => void;
   onCancel: () => void;
 }
@@ -55,10 +59,20 @@ export function EntryForm(props: EntryFormProps) {
   return <FormBody {...props} types={types} />;
 }
 
-function FormBody({ entry, types, onDone, onCancel }: EntryFormProps & { types: OtpTypeView[] }) {
+function FormBody({
+  entry,
+  draft,
+  types,
+  onDone,
+  onCancel,
+}: EntryFormProps & { types: OtpTypeView[] }) {
   const api = useApi();
   const adding = entry === undefined;
-  const baseline = entry ? valuesOf(entry, types) : blankValues(types);
+  const baseline = entry
+    ? valuesOf(entry, types)
+    : draft
+      ? valuesOfDraft(draft, types)
+      : blankValues(types);
   const [values, setValues] = useState<FormValues>(baseline);
   const [showSecret, setShowSecret] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -85,13 +99,15 @@ function FormBody({ entry, types, onDone, onCancel }: EntryFormProps & { types: 
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const found = formProblem(values, type, adding);
+    const found = formProblem(values, type, adding && !draft);
     setProblem(found);
     if (found) {
       return;
     }
     if (entry) {
       void perform(() => api.editEntry(entry.id, toChangesRequest(baseline, values, supported)));
+    } else if (draft) {
+      void perform(() => api.addDraft(draft.draft_id, toDraftEdits(values)));
     } else {
       void perform(() => api.addEntry(toNewEntryRequest(values)));
     }
@@ -101,7 +117,7 @@ function FormBody({ entry, types, onDone, onCancel }: EntryFormProps & { types: 
     <form noValidate className="flex flex-col gap-4" onSubmit={submit} aria-label={adding ? "Add account" : "Edit account"}>
       <h2 className="text-lg font-semibold">{adding ? "Add account" : "Edit account"}</h2>
 
-      {adding ? (
+      {adding && !draft ? (
         <div className="flex flex-col gap-2">
           <Label htmlFor="otp-type">Type</Label>
           <select
@@ -129,24 +145,31 @@ function FormBody({ entry, types, onDone, onCancel }: EntryFormProps & { types: 
       <TextField id="issuer" label="Issuer" value={values.issuer} onChange={(issuer) => change({ issuer })} />
       <TextField id="account" label="Account" value={values.account} onChange={(account) => change({ account })} />
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="secret">
-          {adding ? "Secret key" : "New secret key (leave empty to keep the current one)"}
-        </Label>
-        <div className="flex gap-2">
-          <Input
-            id="secret"
-            type={showSecret ? "text" : "password"}
-            autoComplete="off"
-            spellCheck={false}
-            value={values.secret}
-            onChange={(event) => change({ secret: event.target.value })}
-          />
-          <Button type="button" variant="outline" onClick={() => setShowSecret((shown) => !shown)}>
-            {showSecret ? "Hide" : "Show"}
-          </Button>
+      {draft ? (
+        <p className="text-sm text-muted-foreground">
+          The secret key was read from the link or QR code. It stays inside the app and is not
+          shown here.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="secret">
+            {adding ? "Secret key" : "New secret key (leave empty to keep the current one)"}
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              id="secret"
+              type={showSecret ? "text" : "password"}
+              autoComplete="off"
+              spellCheck={false}
+              value={values.secret}
+              onChange={(event) => change({ secret: event.target.value })}
+            />
+            <Button type="button" variant="outline" onClick={() => setShowSecret((shown) => !shown)}>
+              {showSecret ? "Hide" : "Show"}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {entry && <RevealSecret entryId={entry.id} />}
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { AddAccountScreen } from "@/features/entries/AddAccountScreen";
 import { EntryForm } from "@/features/entries/EntryForm";
 import { EntryList } from "@/features/entries/EntryList";
 import { SettingsScreen } from "@/features/settings/SettingsScreen";
@@ -39,15 +40,11 @@ export function OpenVault({
   if (view.kind === "settings") {
     return <SettingsScreen theme={theme} onThemeChange={onThemeChange} onClose={backToList} />;
   }
-  if (view.kind !== "list") {
-    return (
-      <EntryForm
-        key={view.kind === "edit" ? view.entry.id : "add"}
-        entry={view.kind === "edit" ? view.entry : undefined}
-        onDone={backToList}
-        onCancel={backToList}
-      />
-    );
+  if (view.kind === "add") {
+    return <AddAccountScreen onDone={backToList} onCancel={backToList} />;
+  }
+  if (view.kind === "edit") {
+    return <EntryForm key={view.entry.id} entry={view.entry} onDone={backToList} onCancel={backToList} />;
   }
   return (
     <div className="flex flex-col gap-4">

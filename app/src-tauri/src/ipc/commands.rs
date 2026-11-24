@@ -7,7 +7,8 @@ use mfa_storage::FileStorage;
 use tauri::State;
 
 use super::dto::{
-    EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView, RevealedSecret, VaultStatus,
+    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, NewEntryRequest, OtpTypeView,
+    RevealedSecret, VaultStatus,
 };
 use super::error::{IpcError, IpcErrorCode};
 use super::service::VaultService;
@@ -136,4 +137,36 @@ pub async fn change_password(
 ) -> Result<(), IpcError> {
     let kdf = tuned_kdf_params();
     state.service().change_password(&current, &replacement, kdf)
+}
+
+#[tauri::command]
+pub async fn draft_from_link(
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<Vec<DraftView>, IpcError> {
+    state.service().draft_from_link(&text)
+}
+
+/// `image` is the file's bytes as base64 (raw IPC bodies are not available on Android).
+#[tauri::command]
+pub async fn draft_from_image(
+    state: State<'_, AppState>,
+    image: String,
+) -> Result<Vec<DraftView>, IpcError> {
+    state.service().draft_from_image(&image)
+}
+
+#[tauri::command]
+pub async fn add_draft(
+    state: State<'_, AppState>,
+    id: u32,
+    edits: DraftEditsRequest,
+) -> Result<String, IpcError> {
+    state.service().add_draft(id, edits)
+}
+
+#[tauri::command]
+pub async fn discard_drafts(state: State<'_, AppState>) -> Result<(), IpcError> {
+    state.service().discard_drafts();
+    Ok(())
 }

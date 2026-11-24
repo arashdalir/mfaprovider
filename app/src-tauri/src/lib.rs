@@ -45,6 +45,10 @@ pub fn run() {
             commands::advance_counter,
             commands::reveal_secret,
             commands::change_password,
+            commands::draft_from_link,
+            commands::draft_from_image,
+            commands::add_draft,
+            commands::discard_drafts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

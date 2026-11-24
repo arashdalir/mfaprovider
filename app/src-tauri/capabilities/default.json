@@ -18,6 +18,10 @@
     "allow-move-entry",
     "allow-advance-counter",
     "allow-reveal-secret",
-    "allow-change-password"
+    "allow-change-password",
+    "allow-draft-from-link",
+    "allow-draft-from-image",
+    "allow-add-draft",
+    "allow-discard-drafts"
   ]
 }

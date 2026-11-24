@@ -2,6 +2,8 @@
 // typed function here; `no-restricted-imports` stops other files importing Tauri's `invoke`.
 import { invoke } from "@tauri-apps/api/core";
 
+import type { DraftEditsRequest } from "./generated/DraftEditsRequest";
+import type { DraftView } from "./generated/DraftView";
 import type { EntryChangesRequest } from "./generated/EntryChangesRequest";
 import type { EntryView } from "./generated/EntryView";
 import type { IpcError } from "./generated/IpcError";
@@ -14,6 +16,7 @@ import type { VaultStatus } from "./generated/VaultStatus";
 export type {
   CodeState,
 } from "./generated/CodeState";
+export type { DraftEditsRequest, DraftView };
 export type { EntryChangesRequest, EntryView, IpcError, IpcErrorCode, NewEntryRequest };
 export type { RevealedSecret, VaultStatus };
 export type { OtpTypeView };
@@ -69,4 +72,9 @@ export const ipc = {
     call<RevealedSecret>("reveal_secret", { id, password }),
   changePassword: (current: string, replacement: string) =>
     call<void>("change_password", { current, replacement }),
+  draftFromLink: (text: string) => call<DraftView[]>("draft_from_link", { text }),
+  /** `image` is the file's bytes as base64. */
+  draftFromImage: (image: string) => call<DraftView[]>("draft_from_image", { image }),
+  addDraft: (id: number, edits: DraftEditsRequest) => call<string>("add_draft", { id, edits }),
+  discardDrafts: () => call<void>("discard_drafts"),
 };

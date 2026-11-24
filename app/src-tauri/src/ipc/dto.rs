@@ -158,6 +158,62 @@ impl From<&ParamSpec> for ParamSpecView {
     }
 }
 
+/// An account read from a link or QR code, waiting for the user's confirmation. The secret
+/// stays in Rust; only what the user may review and edit is shown.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct DraftView {
+    pub draft_id: u32,
+    pub otp_type: String,
+    pub issuer: String,
+    pub account: String,
+    pub params: BTreeMap<String, String>,
+}
+
+/// What the user may change before adding a draft; the secret and type are fixed.
+#[derive(Debug, Deserialize, TS)]
+#[ts(export)]
+pub struct DraftEditsRequest {
+    pub issuer: String,
+    pub account: String,
+    pub params: BTreeMap<String, String>,
+    pub tags: Vec<String>,
+    pub notes: String,
+}
+
+pub fn draft_views(drafts: &[NewEntry]) -> Vec<DraftView> {
+    drafts
+        .iter()
+        .enumerate()
+        .map(|(index, draft)| DraftView {
+            draft_id: saturating_u32(index as u64),
+            otp_type: draft.otp_type.clone(),
+            issuer: draft.issuer.clone(),
+            account: draft.account.clone(),
+            params: draft
+                .params
+                .iter()
+                .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                .collect(),
+        })
+        .collect()
+}
+
+/// The draft with the user's edits applied, as a definition ready to add. The secret is
+/// copied (and wiped when that copy drops) so a rejected edit does not lose the draft.
+pub fn apply_edits(draft: &NewEntry, edits: DraftEditsRequest) -> NewEntry {
+    NewEntry {
+        otp_type: draft.otp_type.clone(),
+        issuer: edits.issuer,
+        account: edits.account,
+        secret: Secret::new(draft.secret.as_bytes().to_vec()),
+        params: to_params(edits.params),
+        icon: draft.icon.clone(),
+        tags: edits.tags,
+        notes: edits.notes,
+    }
+}
+
 pub fn entry_views(data: &VaultData, codes: Vec<EntryCode>) -> Vec<EntryView> {
     data.entries
         .iter()

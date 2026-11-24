@@ -18,6 +18,10 @@ const COMMANDS: &[&str] = &[
     "advance_counter",
     "reveal_secret",
     "change_password",
+    "draft_from_link",
+    "draft_from_image",
+    "add_draft",
+    "discard_drafts",
 ];
 
 fn main() {

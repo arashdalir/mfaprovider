@@ -1,4 +1,6 @@
 use mfa_core::vault::{EntryError, SessionError, VaultError};
+use mfa_formats::otpauth::OtpauthError;
+use mfa_formats::qr::QrImageError;
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -56,6 +58,19 @@ impl From<SessionError> for IpcError {
     }
 }
 
+impl From<OtpauthError> for IpcError {
+    /// These messages are fixed sentences that never repeat the secret.
+    fn from(error: OtpauthError) -> Self {
+        Self::invalid_input(error.to_string())
+    }
+}
+
+impl From<QrImageError> for IpcError {
+    fn from(error: QrImageError) -> Self {
+        Self::invalid_input(error.to_string())
+    }
+}
+
 impl From<EntryError> for IpcError {
     fn from(error: EntryError) -> Self {
         match error {
@@ -109,6 +124,19 @@ mod tests {
         assert_eq!(
             code_of(SessionError::Entry(EntryError::EmptySecret)),
             IpcErrorCode::InvalidInput
+        );
+    }
+
+    #[test]
+    fn link_and_image_failures_are_input_errors_with_their_own_sentence() {
+        let link = IpcError::from(OtpauthError::MissingSecret);
+        assert_eq!(link.code, IpcErrorCode::InvalidInput);
+        assert_eq!(link.message.as_deref(), Some("the link has no secret key"));
+        let image = IpcError::from(QrImageError::NoQrCode);
+        assert_eq!(image.code, IpcErrorCode::InvalidInput);
+        assert_eq!(
+            image.message.as_deref(),
+            Some("no QR code was found in the image")
         );
     }
 
