@@ -27,6 +27,9 @@ const SLOT_END: usize = 109;
 const HEADER_END: usize = 137;
 const MAX_FILE_LENGTH: usize = 64 * 1024 * 1024;
 
+/// Length of the vault key in bytes.
+pub const VAULT_KEY_LENGTH: usize = KEY_LENGTH;
+
 /// An unlocked vault: the vault key plus the password slot it was opened with.
 /// Wiped from memory when dropped.
 pub struct OpenedVault {
@@ -41,6 +44,13 @@ impl fmt::Debug for OpenedVault {
 }
 
 impl OpenedVault {
+    /// A copy of the vault key, for wrapping by a key the operating system binds to a
+    /// biometric (ADR-0003, ADR-0016). The copy is wiped when dropped.
+    #[must_use]
+    pub fn key_copy(&self) -> Zeroizing<[u8; VAULT_KEY_LENGTH]> {
+        self.key.clone()
+    }
+
     /// Encrypts `data` under a fresh nonce, keeping the password slot unchanged.
     ///
     /// # Errors
@@ -111,6 +121,29 @@ pub fn open(password: &str, file: &[u8]) -> Result<(OpenedVault, VaultData), Vau
     );
     let padded = decrypt(&key, &parsed.body_nonce, &file[..PREFIX_END], parsed.body)
         .ok_or(VaultError::BodyCorrupted)?;
+    let data = payload::decode(payload::unpad(&padded)?)?;
+    Ok((
+        OpenedVault {
+            key,
+            slot: parsed.slot,
+        },
+        data,
+    ))
+}
+
+/// Opens a vault file with the vault key itself instead of the password. A wrong key and a
+/// damaged body are indistinguishable ([`VaultError::UnwrapFailed`]).
+///
+/// # Errors
+/// If the file is malformed or unsupported, or the key does not open the body.
+pub fn open_with_key(
+    key: &[u8; VAULT_KEY_LENGTH],
+    file: &[u8],
+) -> Result<(OpenedVault, VaultData), VaultError> {
+    let parsed = parse(file)?;
+    let key = Zeroizing::new(*key);
+    let padded = decrypt(&key, &parsed.body_nonce, &file[..PREFIX_END], parsed.body)
+        .ok_or(VaultError::UnwrapFailed)?;
     let data = payload::decode(payload::unpad(&padded)?)?;
     Ok((
         OpenedVault {
@@ -583,5 +616,41 @@ mod tests {
     fn the_golden_file_still_opens_and_holds_the_sample_vault() {
         let (_, data) = open(PASSWORD, GOLDEN).unwrap();
         assert_eq!(data, sample_vault());
+    }
+
+    #[test]
+    fn the_vault_key_opens_the_vault_like_the_password_does() {
+        let (vault, file) = created();
+        let key = vault.key_copy();
+        let (reopened, data) = open_with_key(&key, &file).unwrap();
+        assert_eq!(data, sample_vault());
+        assert_eq!(*reopened.key_copy(), *key);
+    }
+
+    #[test]
+    fn a_wrong_key_is_refused_like_a_wrong_password() {
+        let (_, file) = created();
+        let wrong = [7_u8; VAULT_KEY_LENGTH];
+        assert_eq!(
+            open_with_key(&wrong, &file).unwrap_err(),
+            VaultError::UnwrapFailed
+        );
+    }
+
+    #[test]
+    fn opening_with_the_key_survives_a_password_change() {
+        let (mut vault, file) = created();
+        let key = vault.key_copy();
+        let rewrapped = vault
+            .rewrap(&file, "another password", cheap(), &mut CountingRng(9))
+            .unwrap();
+        assert!(open_with_key(&key, &rewrapped).is_ok());
+        assert!(open("another password", &rewrapped).is_ok());
+    }
+
+    #[test]
+    fn a_malformed_file_is_refused_when_opening_with_the_key() {
+        let key = [0_u8; VAULT_KEY_LENGTH];
+        assert!(open_with_key(&key, b"not a vault").is_err());
     }
 }

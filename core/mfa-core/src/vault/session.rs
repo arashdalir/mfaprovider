@@ -3,10 +3,11 @@
 use std::time::Duration;
 
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 use super::clock::Clock;
 use super::codes::EntryCode;
-use super::container::{self, OpenedVault};
+use super::container::{self, OpenedVault, VAULT_KEY_LENGTH};
 use super::entries::{EntryChanges, EntryError, ImportOp, NewEntry};
 use super::error::VaultError;
 use super::kdf::KdfParams;
@@ -128,6 +129,37 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
             dirty: false,
         });
         Ok(())
+    }
+
+    /// Unlocks with the vault key itself (released by a biometric, ADR-0016).
+    ///
+    /// # Errors
+    /// [`SessionError::NoVault`] if nothing is stored; [`VaultError::UnwrapFailed`] if the key
+    /// is wrong. On error the session stays locked.
+    pub fn unlock_with_key(&mut self, key: &[u8; VAULT_KEY_LENGTH]) -> Result<(), SessionError> {
+        let file = self.storage.read()?.ok_or(SessionError::NoVault)?;
+        let (vault, data) = container::open_with_key(key, &file)?;
+        self.unlocked = Some(Unlocked {
+            vault,
+            data,
+            last_activity_ms: self.clock.monotonic_ms(),
+            dirty: false,
+        });
+        Ok(())
+    }
+
+    /// The vault key, to be wrapped by an OS-bound key. The password is checked again first,
+    /// so an unlocked but unattended session cannot hand the key out.
+    ///
+    /// # Errors
+    /// [`SessionError::Locked`]; [`VaultError::UnwrapFailed`] for a wrong password.
+    pub fn export_key(
+        &mut self,
+        password: &str,
+    ) -> Result<Zeroizing<[u8; VAULT_KEY_LENGTH]>, SessionError> {
+        self.verify_password(password)?;
+        let unlocked = self.unlocked.as_ref().ok_or(SessionError::Locked)?;
+        Ok(unlocked.vault.key_copy())
     }
 
     /// Drops the vault key and all entries; they are wiped from memory as they are dropped.
@@ -907,5 +939,87 @@ mod tests {
         session.lock();
         let mut restarted = session_over(&storage, &clock, LockPolicy::default());
         restarted.unlock(PASSWORD).unwrap();
+    }
+
+    mod key_unlock {
+        use super::*;
+
+        #[test]
+        fn exporting_the_key_needs_the_password_again() {
+            let (mut session, _, _) = created(LockPolicy::default());
+            assert_eq!(
+                session.export_key("wrong").unwrap_err(),
+                SessionError::Vault(VaultError::UnwrapFailed)
+            );
+            assert!(session.export_key(PASSWORD).is_ok());
+        }
+
+        #[test]
+        fn a_locked_session_hands_out_no_key() {
+            let (mut session, _, _) = created(LockPolicy::default());
+            session.lock();
+            assert_eq!(
+                session.export_key(PASSWORD).unwrap_err(),
+                SessionError::Locked
+            );
+        }
+
+        #[test]
+        fn the_exported_key_unlocks_a_locked_session_with_all_entries() {
+            let (mut session, storage, clock) = created(LockPolicy::default());
+            session.add_entry(new_totp("alice"), &registry()).unwrap();
+            let key = session.export_key(PASSWORD).unwrap();
+            let mut fresh = session_over(&storage, &clock, LockPolicy::default());
+            assert!(!fresh.is_unlocked());
+            fresh.unlock_with_key(&key).unwrap();
+            assert_eq!(entry_count(&mut fresh), 1);
+        }
+
+        #[test]
+        fn a_wrong_key_leaves_the_session_locked() {
+            let (_, storage, clock) = created(LockPolicy::default());
+            let mut fresh = session_over(&storage, &clock, LockPolicy::default());
+            assert_eq!(
+                fresh
+                    .unlock_with_key(&[1_u8; VAULT_KEY_LENGTH])
+                    .unwrap_err(),
+                SessionError::Vault(VaultError::UnwrapFailed)
+            );
+            assert!(!fresh.is_unlocked());
+        }
+
+        #[test]
+        fn unlocking_with_a_key_without_a_vault_says_so() {
+            let (storage, clock) = (MemoryStorage::new(), FakeClock::new());
+            let mut session = session_over(&storage, &clock, LockPolicy::default());
+            assert_eq!(
+                session
+                    .unlock_with_key(&[0_u8; VAULT_KEY_LENGTH])
+                    .unwrap_err(),
+                SessionError::NoVault
+            );
+        }
+
+        #[test]
+        fn the_key_still_unlocks_after_the_password_was_changed() {
+            let (mut session, storage, clock) = created(LockPolicy::default());
+            let key = session.export_key(PASSWORD).unwrap();
+            session
+                .change_password(PASSWORD, "new password", kdf())
+                .unwrap();
+            let mut fresh = session_over(&storage, &clock, LockPolicy::default());
+            fresh.unlock_with_key(&key).unwrap();
+            assert!(fresh.is_unlocked());
+        }
+
+        #[test]
+        fn using_the_key_does_not_touch_the_stored_vault() {
+            let (mut session, storage, clock) = created(LockPolicy::default());
+            let key = session.export_key(PASSWORD).unwrap();
+            let before = storage.bytes();
+            let mut fresh = session_over(&storage, &clock, LockPolicy::default());
+            fresh.unlock_with_key(&key).unwrap();
+            assert_eq!(storage.bytes(), before);
+        }
     }
 }
