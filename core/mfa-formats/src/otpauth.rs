@@ -148,7 +148,10 @@ pub fn to_otpauth(entry: &Entry) -> Result<Zeroizing<String>, NoLinkForm> {
         link.push_str(&escape(&entry.issuer));
     }
     for (name, value) in entry.params.iter() {
-        link.push_str(&format!("&{name}={}", escape(value)));
+        link.push('&');
+        link.push_str(name);
+        link.push('=');
+        link.push_str(&escape(value));
     }
     if otp_type == "hotp" && entry.params.get("counter").is_none() {
         link.push_str("&counter=0");
