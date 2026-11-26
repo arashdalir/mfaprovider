@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, Pencil } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, EyeOff, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -104,77 +104,94 @@ function CodeArea({
   }
   const remaining = code.seconds_remaining;
   const period = code.period_seconds;
+  const masked = hideCodes && !revealed;
   return (
     <div className="flex items-center gap-3">
-      {hideCodes && !revealed ? (
-        <>
-          <span className="px-2 font-mono text-2xl tracking-wider" aria-label="Code hidden">
-            {MASKED_CODE}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className={TOGGLE_WIDTH}
-            aria-label={`Show code for ${title}`}
-            onClick={show}
-          >
-            <Eye /> Show
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Copy code for ${title}`}
-            onClick={() => onCopy(code.text)}
-          >
-            <Copy />
-          </Button>
-        </>
-      ) : (
-        <>
-          <Button
-            variant="ghost"
-            className="font-mono text-2xl tracking-wider"
-            aria-label={`Copy code for ${title}`}
-            onClick={() => onCopy(code.text)}
-          >
-            {formatCode(code.text)}
-          </Button>
-          {hideCodes && (
-            <Button
-              variant="outline"
-              size="sm"
-              className={TOGGLE_WIDTH}
-              aria-label={`Hide code for ${title}`}
-              onClick={hide}
-            >
-              <EyeOff /> Hide
-            </Button>
-          )}
-        </>
-      )}
-      {remaining !== null && period !== null ? (
-        <div
-          role="progressbar"
-          aria-label={`Time left for ${title}`}
-          aria-valuemin={0}
-          aria-valuemax={period}
-          aria-valuenow={remaining}
-          aria-valuetext={`${remaining} seconds`}
-          className="flex flex-1 items-center gap-2"
+      <Button
+        variant="ghost"
+        className="font-mono text-2xl tracking-wider"
+        aria-label={`Copy code for ${title}`}
+        onClick={() => onCopy(code.text)}
+      >
+        {masked ? MASKED_CODE : formatCode(code.text)}
+      </Button>
+      {hideCodes && (
+        <Button
+          variant="outline"
+          size="sm"
+          className={TOGGLE_WIDTH}
+          aria-label={`${masked ? "Show" : "Hide"} code for ${title}`}
+          onClick={masked ? show : hide}
         >
-          <div className="h-1.5 flex-1 overflow-hidden rounded bg-muted">
-            <div
-              className={remaining <= LOW_SECONDS ? "h-full bg-destructive" : "h-full bg-primary"}
-              style={{ width: `${(remaining / period) * 100}%` }}
-            />
-          </div>
-          <span className="w-8 text-right text-sm tabular-nums">{remaining}s</span>
-        </div>
-      ) : (
-        <Button variant="outline" size="sm" onClick={onNextCode}>
-          Next code
+          {masked ? <Eye /> : <EyeOff />} {masked ? "Show" : "Hide"}
         </Button>
       )}
+      <div className="flex flex-1 justify-end">
+        {remaining !== null && period !== null ? (
+          <CountdownRing title={title} remaining={remaining} period={period} />
+        ) : (
+          <Button variant="outline" size="sm" onClick={onNextCode}>
+            Next code
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const RING_SIZE = 40;
+const RING_STROKE = 4;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+function CountdownRing({
+  title,
+  remaining,
+  period,
+}: {
+  title: string;
+  remaining: number;
+  period: number;
+}) {
+  const low = remaining <= LOW_SECONDS;
+  const center = RING_SIZE / 2;
+  return (
+    <div
+      role="progressbar"
+      aria-label={`Time left for ${title}`}
+      aria-valuemin={0}
+      aria-valuemax={period}
+      aria-valuenow={remaining}
+      aria-valuetext={`${remaining} seconds`}
+      className="relative size-10 shrink-0"
+    >
+      <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90" aria-hidden="true">
+        <circle
+          cx={center}
+          cy={center}
+          r={RING_RADIUS}
+          fill="none"
+          strokeWidth={RING_STROKE}
+          className="stroke-muted"
+        />
+        <circle
+          cx={center}
+          cy={center}
+          r={RING_RADIUS}
+          fill="none"
+          strokeWidth={RING_STROKE}
+          strokeLinecap="round"
+          strokeDasharray={RING_LENGTH}
+          strokeDashoffset={RING_LENGTH * (1 - remaining / period)}
+          className={low ? "stroke-destructive" : "stroke-primary"}
+        />
+      </svg>
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 flex items-center justify-center text-sm tabular-nums"
+      >
+        {remaining}
+      </span>
     </div>
   );
 }

@@ -24,6 +24,7 @@
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-26: Task created from the user's idea; no design decision taken.
+- 2026-11-26: **Purpose stated by the user:** an account added on one device must show up on the others. That is the requirement every option is judged against (merge of additions first; edits and deletions need the conflict rules from question 3).
 
 ## Progress log (append-only, dated)
 - 2026-11-26: Task created.

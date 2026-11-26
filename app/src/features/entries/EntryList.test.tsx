@@ -211,13 +211,25 @@ describe("EntryList with hidden codes (the default)", () => {
     show([github]);
     await screen.findByText("GitHub · alice");
     expect(screen.queryByText(/482/)).not.toBeInTheDocument();
-    expect(within(maskedRow()).getByLabelText("Code hidden")).toBeInTheDocument();
+    expect(within(maskedRow()).getByRole("button", { name: "Copy code for GitHub · alice" })).toHaveTextContent("••• •••");
     expect(screen.getByRole("progressbar", { name: "Time left for GitHub · alice" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Show code for GitHub · alice" }));
     expect(screen.getByRole("button", { name: "Copy code for GitHub · alice" })).toHaveTextContent("482 913");
     await userEvent.click(screen.getByRole("button", { name: "Hide code for GitHub · alice" }));
     expect(screen.queryByText(/482/)).not.toBeInTheDocument();
+  });
+
+  it("has one copy button per row: the masked code itself", async () => {
+    show([github]);
+    await screen.findByText("GitHub · alice");
+    expect(screen.getAllByRole("button", { name: /Copy code/ })).toHaveLength(1);
+  });
+
+  it("shows the seconds left inside the countdown ring", async () => {
+    show([github]);
+    const ring = await screen.findByRole("progressbar", { name: "Time left for GitHub · alice" });
+    expect(ring).toHaveTextContent("12");
   });
 
   it("reveals only the account that was asked for", async () => {
