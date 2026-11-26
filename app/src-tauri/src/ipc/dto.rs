@@ -85,6 +85,18 @@ pub struct EntryChangesRequest {
     pub notes: Option<String>,
 }
 
+/// Whether biometric unlock can be used on this device, and where it stands.
+#[derive(Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct BiometricStatus {
+    /// The device offers it (a platform provider exists and a biometric is set up).
+    pub available: bool,
+    pub enabled: bool,
+    /// Enabled, but the master password has not been typed for too long.
+    pub password_due: bool,
+    pub reprompt_days: u32,
+}
+
 /// How a candidate relates to an account the vault already holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]

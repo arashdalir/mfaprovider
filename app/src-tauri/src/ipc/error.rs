@@ -14,6 +14,14 @@ pub enum IpcErrorCode {
     AlreadyExists,
     WrongPassword,
     PasswordRequired,
+    /// Biometrics has gone too long without the master password; type it.
+    PasswordDue,
+    BiometricUnavailable,
+    BiometricNotEnabled,
+    BiometricCancelled,
+    BiometricFailed,
+    /// The device dropped the biometric key (a new fingerprint, say); it is switched off.
+    BiometricInvalidated,
     NotFound,
     InvalidInput,
     Unsupported,

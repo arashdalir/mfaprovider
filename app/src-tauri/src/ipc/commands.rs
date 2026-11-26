@@ -3,14 +3,16 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+use mfa_core::biometric::NoBiometrics;
 use mfa_storage::FileStorage;
 use tauri::State;
 use zeroize::Zeroizing;
 
+use super::device_settings::FileSettings;
 use super::dto::{
-    DraftEditsRequest, DraftView, DuplicateView, EntryChangesRequest, EntryView, ImportChoice,
-    ImportFormatView, ImportPreview, ImportResult, NewEntryRequest, OtpTypeView, RevealedSecret,
-    VaultStatus,
+    BiometricStatus, DraftEditsRequest, DraftView, DuplicateView, EntryChangesRequest, EntryView,
+    ImportChoice, ImportFormatView, ImportPreview, ImportResult, NewEntryRequest, OtpTypeView,
+    RevealedSecret, VaultStatus,
 };
 use super::error::{IpcError, IpcErrorCode};
 use super::service::{VaultService, decode_base64_file};
@@ -22,8 +24,10 @@ pub struct AppState(Mutex<Service>);
 
 impl AppState {
     pub fn new(vault_path: std::path::PathBuf) -> Self {
+        let settings = FileSettings::new(vault_path.with_file_name("device.json"));
         let service =
-            VaultService::new(FileStorage::new(vault_path), SystemClock::default(), OsRng);
+            VaultService::new(FileStorage::new(vault_path), SystemClock::default(), OsRng)
+                .with_biometrics(Box::new(NoBiometrics), Box::new(settings));
         Self(Mutex::new(service))
     }
 
@@ -56,6 +60,38 @@ pub async fn create_vault(state: State<'_, AppState>, password: String) -> Resul
 #[tauri::command]
 pub async fn unlock(state: State<'_, AppState>, password: String) -> Result<(), IpcError> {
     state.service().unlock(&password)
+}
+
+#[tauri::command]
+pub async fn biometric_status(state: State<'_, AppState>) -> Result<BiometricStatus, IpcError> {
+    Ok(state.service().biometric_status())
+}
+
+#[tauri::command]
+pub async fn biometric_enable(
+    state: State<'_, AppState>,
+    password: String,
+) -> Result<(), IpcError> {
+    let password = Zeroizing::new(password);
+    state.service().biometric_enable(&password)
+}
+
+#[tauri::command]
+pub async fn biometric_disable(state: State<'_, AppState>) -> Result<(), IpcError> {
+    state.service().biometric_disable()
+}
+
+#[tauri::command]
+pub async fn unlock_with_biometric(state: State<'_, AppState>) -> Result<(), IpcError> {
+    state.service().unlock_with_biometric()
+}
+
+#[tauri::command]
+pub async fn set_biometric_reprompt_days(
+    state: State<'_, AppState>,
+    days: u32,
+) -> Result<(), IpcError> {
+    state.service().set_biometric_reprompt_days(days)
 }
 
 #[tauri::command]

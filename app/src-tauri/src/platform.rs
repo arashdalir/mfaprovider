@@ -9,6 +9,7 @@ use mfa_core::vault::{Clock, KdfParams, Rng, run_kdf_benchmark, tune_kdf_params}
 const KDF_TARGET: Duration = Duration::from_millis(500);
 const KDF_MAX_MEMORY_KIB: u32 = 256 * 1024;
 
+#[derive(Clone)]
 pub struct SystemClock {
     started: Instant,
 }

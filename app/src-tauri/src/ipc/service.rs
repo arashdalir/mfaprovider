@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
+use mfa_core::biometric::{BiometricProvider, NoBiometrics};
 use mfa_core::otp::OtpRegistry;
 use mfa_core::vault::{
     Clock, EntryChanges, KdfParams, LockPolicy, NewEntry, Rng, Storage, SystemEvent, VaultSession,
@@ -17,6 +18,7 @@ use mfa_formats::migration::{is_migration_link, parse_migration_link};
 use mfa_formats::otpauth::parse_otpauth;
 use mfa_formats::qr::{MAX_FILE_BYTES, decode_qr_image};
 
+use super::device_settings::{MemorySettings, SettingsStore};
 use super::dto::{
     DraftEditsRequest, DraftView, DuplicateKind, DuplicateView, EntryChangesRequest, EntryView,
     ImportChoice, ImportDecision, ImportFormatView, ImportItemView, ImportPreview, ImportResult,
@@ -26,7 +28,10 @@ use super::dto::{
 use super::error::{IpcError, IpcErrorCode};
 
 pub struct VaultService<S: Storage, C: Clock, R: Rng> {
-    session: VaultSession<S, C, R>,
+    pub(super) session: VaultSession<S, C, R>,
+    pub(super) clock: C,
+    pub(super) biometrics: Box<dyn BiometricProvider>,
+    pub(super) device: Box<dyn SettingsStore>,
     registry: OtpRegistry,
     /// Accounts read from links or QR codes, awaiting confirmation. Dropped when the vault locks.
     drafts: Vec<NewEntry>,
@@ -38,10 +43,13 @@ struct PendingImport {
     definitions: Vec<NewEntry>,
 }
 
-impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
+impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
     pub fn new(storage: S, clock: C, rng: R) -> Self {
         Self {
-            session: VaultSession::new(storage, clock, rng, LockPolicy::default()),
+            session: VaultSession::new(storage, clock.clone(), rng, LockPolicy::default()),
+            clock,
+            biometrics: Box::new(NoBiometrics),
+            device: Box::new(MemorySettings::default()),
             registry: OtpRegistry::with_builtins(),
             drafts: Vec::new(),
             pending_import: None,
@@ -59,11 +67,15 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
         if password.is_empty() {
             return Err(IpcError::invalid_input("the password is empty"));
         }
-        Ok(self.session.create(password, kdf)?)
+        self.session.create(password, kdf)?;
+        self.note_password_typed();
+        Ok(())
     }
 
     pub fn unlock(&mut self, password: &str) -> Result<(), IpcError> {
-        Ok(self.session.unlock(password)?)
+        self.session.unlock(password)?;
+        self.note_password_typed();
+        Ok(())
     }
 
     /// The OTP types a form can offer; needs no unlocked vault.
@@ -548,7 +560,7 @@ mod tests {
 
     use super::*;
 
-    impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
+    impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
         fn preview_text(&mut self, format: &str, text: &str) -> Result<ImportPreview, IpcError> {
             self.import_preview(format, text.as_bytes(), "")
         }
@@ -1942,6 +1954,339 @@ mod tests {
                     .code,
                 IpcErrorCode::NotFound
             );
+        }
+    }
+
+    mod biometrics {
+        use std::sync::{Arc, Mutex};
+
+        use mfa_core::biometric::{Availability, BiometricError, BiometricProvider, VaultKeyBytes};
+        use zeroize::Zeroizing;
+
+        use super::*;
+        use crate::ipc::device_settings::{DeviceSettings, MemorySettings, SettingsStore};
+
+        const DAY_SECONDS: u64 = 24 * 60 * 60;
+
+        #[derive(Default)]
+        struct FakeState {
+            available: bool,
+            wrapped: Option<[u8; 32]>,
+            next_release: Option<BiometricError>,
+            prompts: u32,
+        }
+
+        /// A phone: wraps the key it is given and gives it back unless told to misbehave.
+        #[derive(Clone, Default)]
+        struct FakePhone(Arc<Mutex<FakeState>>);
+
+        impl FakePhone {
+            fn with_biometrics() -> Self {
+                let phone = Self::default();
+                phone.0.lock().unwrap().available = true;
+                phone
+            }
+
+            fn fail_next_prompt_with(&self, error: BiometricError) {
+                self.0.lock().unwrap().next_release = Some(error);
+            }
+
+            fn prompts(&self) -> u32 {
+                self.0.lock().unwrap().prompts
+            }
+
+            fn holds_a_wrap(&self) -> bool {
+                self.0.lock().unwrap().wrapped.is_some()
+            }
+
+            fn hold_another_key(&self) {
+                self.0.lock().unwrap().wrapped = Some([9; 32]);
+            }
+        }
+
+        impl BiometricProvider for FakePhone {
+            fn availability(&self) -> Availability {
+                if self.0.lock().unwrap().available {
+                    Availability::Available
+                } else {
+                    Availability::Unavailable
+                }
+            }
+
+            fn enrol(&mut self, key: &[u8; 32]) -> Result<(), BiometricError> {
+                self.0.lock().unwrap().wrapped = Some(*key);
+                Ok(())
+            }
+
+            fn release(&mut self) -> Result<VaultKeyBytes, BiometricError> {
+                let mut state = self.0.lock().unwrap();
+                state.prompts += 1;
+                if let Some(error) = state.next_release.take() {
+                    return Err(error);
+                }
+                state
+                    .wrapped
+                    .map(Zeroizing::new)
+                    .ok_or(BiometricError::Invalidated)
+            }
+
+            fn remove(&mut self) {
+                self.0.lock().unwrap().wrapped = None;
+            }
+        }
+
+        struct UnwritableSettings;
+
+        impl SettingsStore for UnwritableSettings {
+            fn load(&self) -> DeviceSettings {
+                DeviceSettings::default()
+            }
+
+            fn save(&mut self, _: &DeviceSettings) -> std::io::Result<()> {
+                Err(std::io::Error::other("read-only"))
+            }
+        }
+
+        struct Device {
+            service: TestService,
+            phone: FakePhone,
+            settings: MemorySettings,
+            clock: TestClock,
+        }
+
+        fn device_with(phone: FakePhone) -> Device {
+            let (storage, clock) = (MemoryStorage::new(), TestClock(Rc::new(Cell::new(0))));
+            let settings = MemorySettings::default();
+            let mut service = VaultService::new(storage, clock.clone(), CountingRng(1))
+                .with_biometrics(Box::new(phone.clone()), Box::new(settings.clone()));
+            service.create_vault(PASSWORD, KdfParams::MINIMUM).unwrap();
+            Device {
+                service,
+                phone,
+                settings,
+                clock,
+            }
+        }
+
+        fn device() -> Device {
+            device_with(FakePhone::with_biometrics())
+        }
+
+        fn enabled_and_locked() -> Device {
+            let mut device = device();
+            device.service.add_entry(totp_request("alice")).unwrap();
+            device.service.biometric_enable(PASSWORD).unwrap();
+            device.service.lock();
+            device
+        }
+
+        fn code(result: Result<(), IpcError>) -> IpcErrorCode {
+            result.unwrap_err().code
+        }
+
+        #[test]
+        fn a_device_without_biometrics_says_so_and_refuses_to_enable_them() {
+            let mut device = device_with(FakePhone::default());
+            let status = device.service.biometric_status();
+            assert!(!status.available && !status.enabled);
+            assert_eq!(
+                code(device.service.biometric_enable(PASSWORD)),
+                IpcErrorCode::BiometricUnavailable
+            );
+        }
+
+        #[test]
+        fn enabling_asks_for_the_password_again_and_enrols_nothing_when_it_is_wrong() {
+            let mut device = device();
+            assert_eq!(
+                code(device.service.biometric_enable("wrong")),
+                IpcErrorCode::WrongPassword
+            );
+            assert!(!device.phone.holds_a_wrap());
+            assert!(!device.service.biometric_status().enabled);
+        }
+
+        #[test]
+        fn enabling_needs_an_unlocked_vault() {
+            let mut device = device();
+            device.service.lock();
+            assert_eq!(
+                code(device.service.biometric_enable(PASSWORD)),
+                IpcErrorCode::Locked
+            );
+        }
+
+        #[test]
+        fn once_enabled_the_biometric_unlocks_the_locked_vault_with_all_entries() {
+            let mut device = enabled_and_locked();
+            assert!(device.service.biometric_status().enabled);
+            assert!(!device.service.status().unwrap().unlocked);
+            device.service.unlock_with_biometric().unwrap();
+            assert_eq!(accounts(&mut device.service), ["alice"]);
+            assert_eq!(device.phone.prompts(), 1);
+        }
+
+        #[test]
+        fn without_enabling_there_is_nothing_to_unlock_with() {
+            let mut device = device();
+            device.service.lock();
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::BiometricNotEnabled
+            );
+            assert_eq!(device.phone.prompts(), 0);
+        }
+
+        #[test]
+        fn a_cancelled_or_failed_prompt_leaves_the_vault_locked_and_biometrics_on() {
+            let mut device = enabled_and_locked();
+            device
+                .phone
+                .fail_next_prompt_with(BiometricError::Cancelled);
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::BiometricCancelled
+            );
+            device.phone.fail_next_prompt_with(BiometricError::Failed);
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::BiometricFailed
+            );
+            assert!(!device.service.status().unwrap().unlocked);
+            assert!(device.service.biometric_status().enabled);
+            device.service.unlock_with_biometric().unwrap();
+        }
+
+        #[test]
+        fn the_password_always_still_works() {
+            let mut device = enabled_and_locked();
+            device.phone.fail_next_prompt_with(BiometricError::Failed);
+            let _ = device.service.unlock_with_biometric();
+            device.service.unlock(PASSWORD).unwrap();
+        }
+
+        #[test]
+        fn a_dropped_biometric_key_switches_biometrics_off_and_deletes_the_wrap() {
+            let mut device = enabled_and_locked();
+            device
+                .phone
+                .fail_next_prompt_with(BiometricError::Invalidated);
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::BiometricInvalidated
+            );
+            assert!(!device.service.biometric_status().enabled);
+            assert!(!device.phone.holds_a_wrap());
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::BiometricNotEnabled
+            );
+        }
+
+        #[test]
+        fn a_wrapped_key_that_does_not_open_this_vault_counts_as_invalidated() {
+            let mut device = enabled_and_locked();
+            device.phone.hold_another_key();
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::BiometricInvalidated
+            );
+            assert!(!device.service.biometric_status().enabled);
+            assert!(!device.service.status().unwrap().unlocked);
+        }
+
+        #[test]
+        fn after_the_period_the_password_is_due_and_no_prompt_is_shown() {
+            let mut device = enabled_and_locked();
+            device.clock.advance_secs(7 * DAY_SECONDS + 1);
+            assert!(device.service.biometric_status().password_due);
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::PasswordDue
+            );
+            assert_eq!(device.phone.prompts(), 0);
+        }
+
+        #[test]
+        fn typing_the_password_starts_the_period_again() {
+            let mut device = enabled_and_locked();
+            device.clock.advance_secs(7 * DAY_SECONDS + 1);
+            device.service.unlock(PASSWORD).unwrap();
+            device.service.lock();
+            assert!(!device.service.biometric_status().password_due);
+            device.service.unlock_with_biometric().unwrap();
+        }
+
+        #[test]
+        fn a_biometric_unlock_does_not_start_the_period_again() {
+            let mut device = enabled_and_locked();
+            device.clock.advance_secs(6 * DAY_SECONDS);
+            device.service.unlock_with_biometric().unwrap();
+            device.service.lock();
+            device.clock.advance_secs(2 * DAY_SECONDS);
+            assert!(device.service.biometric_status().password_due);
+        }
+
+        #[test]
+        fn the_period_can_be_changed_within_limits() {
+            let mut device = enabled_and_locked();
+            device.service.set_biometric_reprompt_days(30).unwrap();
+            assert_eq!(device.service.biometric_status().reprompt_days, 30);
+            device.clock.advance_secs(20 * DAY_SECONDS);
+            device.service.unlock_with_biometric().unwrap();
+            for bad in [0, 366] {
+                assert_eq!(
+                    code(device.service.set_biometric_reprompt_days(bad)),
+                    IpcErrorCode::InvalidInput
+                );
+            }
+        }
+
+        #[test]
+        fn locking_keeps_the_setting_and_a_password_change_keeps_the_biometric_working() {
+            let mut device = device();
+            device.service.biometric_enable(PASSWORD).unwrap();
+            device
+                .service
+                .change_password(PASSWORD, "another password", KdfParams::MINIMUM)
+                .unwrap();
+            device.service.lock();
+            assert!(device.service.biometric_status().enabled);
+            device.service.unlock_with_biometric().unwrap();
+        }
+
+        #[test]
+        fn disabling_deletes_the_wrap_and_works_while_locked() {
+            let mut device = enabled_and_locked();
+            device.service.biometric_disable().unwrap();
+            assert!(!device.phone.holds_a_wrap());
+            assert!(!device.service.biometric_status().enabled);
+            assert_eq!(
+                code(device.service.unlock_with_biometric()),
+                IpcErrorCode::BiometricNotEnabled
+            );
+        }
+
+        #[test]
+        fn enabling_is_undone_when_the_setting_cannot_be_saved() {
+            let (storage, clock) = (MemoryStorage::new(), TestClock(Rc::new(Cell::new(0))));
+            let phone = FakePhone::with_biometrics();
+            let mut service = VaultService::new(storage, clock, CountingRng(1))
+                .with_biometrics(Box::new(phone.clone()), Box::new(UnwritableSettings));
+            service.create_vault(PASSWORD, KdfParams::MINIMUM).unwrap();
+            assert_eq!(
+                code(service.biometric_enable(PASSWORD)),
+                IpcErrorCode::StorageFailed
+            );
+            assert!(!phone.holds_a_wrap());
+        }
+
+        #[test]
+        fn the_settings_hold_no_key_or_secret() {
+            let device = enabled_and_locked();
+            let saved = serde_json::to_string(&device.settings.load()).unwrap();
+            assert!(!saved.to_lowercase().contains("key"), "{saved}");
+            assert!(!saved.contains("GEZDGNBV"), "{saved}");
         }
     }
 }
