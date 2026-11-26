@@ -1204,7 +1204,7 @@ mod tests {
         let (service, _, _) = service();
         let formats = service.import_formats();
         let ids: Vec<_> = formats.iter().map(|f| f.id.as_str()).collect();
-        assert_eq!(ids, [FORMAT, "google-migration"]);
+        assert_eq!(ids, [FORMAT, "google-migration", "freeotp"]);
     }
 
     #[test]

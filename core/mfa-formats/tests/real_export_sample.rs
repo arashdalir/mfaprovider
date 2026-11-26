@@ -5,7 +5,7 @@
 
 use mfa_core::otp::OtpRegistry;
 use mfa_core::vault::VaultData;
-use mfa_formats::import::{Importer, LinkListImporter};
+use mfa_formats::import::{FreeOtpImporter, Importer, LinkListImporter};
 use mfa_formats::merge::{plan_merge, MergeStatus};
 
 #[test]
@@ -46,4 +46,25 @@ fn a_real_password_protected_archive_imports_cleanly() {
         batch.skipped.len()
     );
     assert_eq!(batch.skipped.len(), 0);
+}
+
+/// `MFA_SAMPLE_FREEOTP=path/to/freeotp-backup.json cargo test -p mfa-formats --test real_export_sample -- --ignored --nocapture`
+#[test]
+#[ignore = "needs MFA_SAMPLE_FREEOTP pointing at a real FreeOTP backup"]
+fn a_real_freeotp_backup_imports_cleanly() {
+    let path = std::env::var("MFA_SAMPLE_FREEOTP").expect("set MFA_SAMPLE_FREEOTP");
+    let bytes = std::fs::read(path).unwrap();
+    let batch = FreeOtpImporter
+        .parse(&bytes, &OtpRegistry::with_builtins())
+        .unwrap();
+    let definitions: Vec<_> = batch.entries.into_iter().map(|e| e.definition).collect();
+    let statuses = plan_merge(&VaultData::empty(0), &definitions);
+    let new = statuses.iter().filter(|s| **s == MergeStatus::New).count();
+    println!(
+        "accounts read: {}, skipped: {}, new in an empty vault: {new}",
+        definitions.len(),
+        batch.skipped.len()
+    );
+    assert_eq!(batch.skipped.len(), 0);
+    assert_eq!(new, definitions.len());
 }

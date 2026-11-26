@@ -2,9 +2,11 @@
 //! An importer only reads; merging with the vault is [`crate::merge`]'s job, so a preview can
 //! be shown before anything changes.
 
+mod freeotp;
 mod google_migration;
 mod link_list;
 
+pub use freeotp::FreeOtpImporter;
 pub use google_migration::GoogleMigrationImporter;
 pub use link_list::LinkListImporter;
 
@@ -46,6 +48,8 @@ pub enum ImportError {
     NotText,
     #[error("the file holds more than {MAX_ITEMS} items")]
     TooManyItems,
+    #[error("the file is not in the expected format")]
+    NotThisFormat,
     #[error("no accounts were found in the file")]
     NothingFound,
 }
@@ -68,6 +72,7 @@ pub fn all_importers() -> Vec<Box<dyn Importer>> {
     vec![
         Box::new(LinkListImporter),
         Box::new(GoogleMigrationImporter),
+        Box::new(FreeOtpImporter),
     ]
 }
 
@@ -147,8 +152,9 @@ mod tests {
     fn importers_are_found_by_id() {
         assert!(importer("otpauth-list").is_some());
         assert!(importer("google-migration").is_some());
+        assert!(importer("freeotp").is_some());
         assert!(importer("nonsense").is_none());
         let ids: Vec<_> = all_importers().iter().map(|i| i.id()).collect();
-        assert_eq!(ids, ["otpauth-list", "google-migration"]);
+        assert_eq!(ids, ["otpauth-list", "google-migration", "freeotp"]);
     }
 }
