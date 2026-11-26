@@ -1,6 +1,6 @@
 # ADR-0017: The trip to a phone's file picker does not lock the vault
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-27
 - Related tasks: TASK-0012
 - Refines: ADR-0003 (lock when the app goes to the background)

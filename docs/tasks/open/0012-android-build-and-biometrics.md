@@ -36,5 +36,7 @@ Make the app build and run on Android: toolchain and CI job, `BiometricProvider`
 
 - 2026-11-27: Phone test of `c4ef1b2` (user): import now works as expected. CI green. Not reported: QR from an image, locking after going to the home screen, and locking again after a picker.
 
+- 2026-11-27: The user accepted ADR-0015, ADR-0016 and ADR-0017. `gen/android` committed (checked for local paths and secrets; Tauri's ignore files keep the machine-specific ones out).
+
 ## Next step
 Still to check on the phone: read a QR image through the picker (no lock); go to the home screen and back, also after using a picker (locks). Also: (1) the user accepts or rejects ADR-0015, then commit `gen/android` (holds the Kotlin plugin; until then it exists only on this machine); also ADR-0016 and ADR-0017; (2) an Android CI job and written SDK/NDK setup steps; (3) review logs/crash output for secrets (with TASK-0013); (4) a signed release build (with TASK-0013).

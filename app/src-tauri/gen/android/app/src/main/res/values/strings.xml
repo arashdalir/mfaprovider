@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">"MFA Provider"</string>
+    <string name="main_activity_title">"MFA Provider"</string>
+</resources>

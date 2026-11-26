@@ -22,5 +22,7 @@ Before the first release: threat-model review against the accepted ADRs, depende
 ## Progress log (append-only, dated)
 - 2026-11-17: Task created.
 
+- 2026-11-27: Review items from the Android work: the template `FileProvider` paths (`res/xml/file_paths.xml`) allow all of external storage and the cache, narrow or remove it; check whether the release build needs the `INTERNET` permission; the vault key crosses the Kotlin plugin bridge as base64 (see TASK-0023).
+
 ## Next step
 Starts after the feature tasks. First action then: draft the threat model from ADR-0002/0003 and review it with the user.

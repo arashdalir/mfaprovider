@@ -1,6 +1,6 @@
 # ADR-0015: Android application id keeps the underscore; the code namespace does not
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-26
 - Related tasks: TASK-0012
 - Refines: ADR-0001 (stack)

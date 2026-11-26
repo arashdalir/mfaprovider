@@ -1,6 +1,6 @@
 # ADR-0016: Android biometric unlock — own Kotlin plugin, key-bound Keystore wrap, core unlocks with a key
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-26
 - Related tasks: TASK-0023 (also TASK-0012)
 - Refines: ADR-0003 (biometric provider model), ADR-0002 (Kotlin plugin for Keystore/biometric), ADR-0011 (one password slot, biometric wraps outside the file)
