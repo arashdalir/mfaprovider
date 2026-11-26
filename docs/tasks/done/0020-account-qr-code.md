@@ -1,6 +1,6 @@
 # TASK-0020: QR code of an account in its details
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-26
 - Updated: 2026-11-26
 - Related ADRs: ADR-0002 (seeds stay out of JS except the explicit reveal), ADR-0013
@@ -23,5 +23,7 @@
 
 - 2026-11-26: Done in code. `mfa-formats::otpauth::to_otpauth(&Entry) -> Zeroizing<String>` (the inverse of `parse_otpauth`: percent-encoded label, `issuer`, stored params, `counter=0` for counter accounts; `totp`, `hotp`, `steam`; other types give `NoLinkForm`) with 4 test groups including round trips of Google's example, SHA-512/8 digits/60 s, HOTP, Steam and non-ASCII names. `mfa-formats::qr_encode::qr_svg(text)` (crate `qrcode` with the `svg` feature moved from dev to normal dependencies; black on white with quiet zone, at least 256 px). `RevealedSecret` gained `qr_svg: Option<String>` (the only response that carries seed material still is the reveal; the link itself never crosses IPC; a test checks the picture contains neither the key nor "otpauth"). UI: `RevealSecret` shows the picture (data-URL `<img>`, allowed by the existing CSP `img-src data:`), hidden with the key. Tests: formats 114, shell 105, UI 161; clippy and `cargo deny` clean. **Not verified:** that another phone's camera actually scans it (the QR matrix comes from the `qrcode` crate and is not decoded back in a test); how it looks on the phone.
 
+- 2026-11-26: Closed on the user's instruction.
+
 ## Next step
-Rebuild and install on the phone; the user scans the code with another device.
+None.

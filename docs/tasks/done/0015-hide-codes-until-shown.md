@@ -1,6 +1,6 @@
 # TASK-0015: Hide one-time codes until the user presses Show
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-24
 - Updated: 2026-11-24
 - Related ADRs: ADR-0003 (security model)
@@ -25,5 +25,7 @@ Codes are not drawn on screen by default. Each account has a Show button; a reve
 
 - 2026-11-24: Implemented in EntryRow (per-row reveal with 30 s timer), EntryList, settings (`hideCodes`, default true, validated) and the settings screen. UI tests 149 pass locally (`--pool=vmThreads`), tsc clean, oxlint shows only the existing button.tsx warning. Existing list tests now set `hideCodes: false` explicitly; 4 new list tests and 3 settings tests cover masking, per-account reveal, copy-while-hidden, auto-hide, default and round trip.
 
+- 2026-11-26: Closed on the user's instruction.
+
 ## Next step
-Push, watch CI, then close: the user to look at it in the real app (Show button layout, 30 s auto-hide).
+None.

@@ -1,6 +1,6 @@
 # TASK-0014: Import from a password-protected ZIP (WinAuth)
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-24
 - Updated: 2026-11-24
 - Related ADRs: ADR-0014 (accepted), ADR-0004, ADR-0013
@@ -25,5 +25,7 @@ The import wizard accepts a password-protected ZIP as WinAuth writes it: pick th
 
 - 2026-11-24: Done in one pass. `mfa-formats::archive` (`is_zip`, `read_single_file`, `ArchiveError`; zeroising output; 12 tests with archives built in the test: right/wrong/missing password, damaged data, one file only, folders ignored, entry-count cap, declared-size bomb refused from header, read capped regardless of header). Shell: `import_preview(format, file_base64, password)` replaces the text version (one path for text and archives; UTF-8/UTF-16 decoding now only in Rust); new error code `password_required`; password held in `Zeroizing`, never stored or echoed (tested); 3 new service tests (99 total). UI: file is read as base64 (5 MiB cap), a password prompt appears only when the core says one is needed, wrong password keeps the prompt, choosing another file forgets password and file; `read-text-file` removed (4 new UI tests, 148 total). Dependency checks: `cargo deny` licences/bans/sources ok in both workspaces. **Not verified:** the real zip (needs the user to run the ignored test with their password: `MFA_SAMPLE_ZIP`, `MFA_SAMPLE_ZIP_PASSWORD`); a zip written by 7-Zip/AES is refused as "wrong password, or the file is damaged" (AES left out by ADR-0014); CI; the wizard in the real app. Known limit: `ZipArchive` reads the file into memory in the crate, and plaintext lives in a zeroising buffer only until the importer finishes; intermediate copies made by the decoder are not zeroised.
 
+- 2026-11-26: Closed on the user's instruction. The real-zip test with the user's password was never run here; closed on the user's instruction.
+
 ## Next step
-Push, watch CI; the user runs the ignored real-zip test with their password and tries the wizard with the zip. Then decide on AES-encrypted zips only if a real file needs it.
+None.

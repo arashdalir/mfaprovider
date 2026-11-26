@@ -1,6 +1,6 @@
 # TASK-0018: Countdown ring instead of a bar; the code is the copy button
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-26
 - Updated: 2026-11-26
 - Related ADRs: none (UI-only; see TASK-0015 for hide/show)
@@ -22,5 +22,7 @@
 
 - 2026-11-26: Done in `EntryRow.tsx`: `CountdownRing` (SVG ring, seconds in the centre, warning colour at 5 s or less, same progressbar role and values), one code button for masked and shown states, copy icon removed. UI tests 151 (3 new, 1 changed). APK rebuilt and installed on the phone; not yet looked at by the user. Local prettier is not installed, so formatting was not machine-checked.
 
+- 2026-11-26: Closed on the user's instruction.
+
 ## Next step
-The user looks at the ring on the phone and says what to change; then close the task.
+None.

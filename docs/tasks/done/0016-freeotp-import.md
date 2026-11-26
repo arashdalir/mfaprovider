@@ -1,6 +1,6 @@
 # TASK-0016: Import from a FreeOTP backup (JSON)
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-26
 - Updated: 2026-11-26
 - Related ADRs: ADR-0004
@@ -26,5 +26,7 @@ The import wizard accepts a FreeOTP / FreeOTP+ JSON backup (`freeotp-backup_*.js
 
 - 2026-11-26: Done. `FreeOtpImporter` (`mfa-formats::import::freeotp`): reads `tokens`; secret as signed bytes (`Vec<i8>`, zeroised on drop, converted through a zeroising buffer); TOTP/HOTP (HOTP keeps its counter); SHA1/256/512 (MD5 and unknown types skipped with fixed sentences); only non-default digits/period are stored; issuer from `issuerExt`, else split from `label`. New `ImportError::NotThisFormat` for files that are not this JSON shape. 10 tests (formats 107, shell 103 with the format list updated). Real backup check (counts only): 17 read, 0 skipped, 17 new. Added `serde` + `serde_json` to `mfa-formats`; `cargo deny` ok in both workspaces. **Not verified:** CI; the wizard in the real app; other FreeOTP variants (`issuerInt`/`issuerAlt`, images, original FreeOTP exports) were not seen and are ignored. Known limit: the decoded JSON text holds the secrets until the parse ends and is not zeroised (same as the link-list importer).
 
+- 2026-11-26: Closed on the user's instruction.
+
 ## Next step
-Push, watch CI; the user tries the wizard with the real backup. Then close the task.
+None.
