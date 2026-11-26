@@ -16,6 +16,8 @@
     "allow-lock",
     "allow-record-activity",
     "allow-report-backgrounded",
+    "allow-report-foregrounded",
+    "allow-expect-file-picker",
     "allow-set-idle-lock",
     "allow-list-entries",
     "allow-add-entry",

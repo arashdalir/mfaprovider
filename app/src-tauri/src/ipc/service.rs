@@ -26,6 +26,7 @@ use super::dto::{
     apply_edits, draft_views, entry_views, otp_type_views, parse_entry_id,
 };
 use super::error::{IpcError, IpcErrorCode};
+use super::picker_excuse::{Now, PickerExcuse};
 
 pub struct VaultService<S: Storage, C: Clock, R: Rng> {
     pub(super) session: VaultSession<S, C, R>,
@@ -37,6 +38,7 @@ pub struct VaultService<S: Storage, C: Clock, R: Rng> {
     drafts: Vec<NewEntry>,
     /// A file read for import, awaiting the user's choices. Dropped when the vault locks.
     pending_import: Option<PendingImport>,
+    picker_excuse: PickerExcuse,
 }
 
 struct PendingImport {
@@ -53,6 +55,7 @@ impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
             registry: OtpRegistry::with_builtins(),
             drafts: Vec::new(),
             pending_import: None,
+            picker_excuse: PickerExcuse::default(),
         }
     }
 
@@ -105,11 +108,44 @@ impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
     }
 
     pub fn notify(&mut self, event: SystemEvent) {
+        let now = self.now();
+        if event == SystemEvent::Backgrounded && self.picker_excuse.covers_leaving(now) {
+            return;
+        }
         self.session.notify(event);
         self.drop_drafts_if_locked();
     }
 
+    /// The user is about to leave for the system's file picker (ADR-0017).
+    pub fn expect_file_picker(&mut self) {
+        if self.session.is_unlocked() {
+            let now = self.now();
+            self.picker_excuse.grant(now);
+        }
+    }
+
+    /// The app is on the screen again; an excuse never outlasts the trip it was given for.
+    pub fn return_to_foreground(&mut self) {
+        self.lock_if_picker_overstayed();
+        self.picker_excuse.clear();
+    }
+
+    fn lock_if_picker_overstayed(&mut self) {
+        if self.picker_excuse.is_overstayed(self.now()) {
+            self.picker_excuse.clear();
+            self.notify(SystemEvent::Backgrounded);
+        }
+    }
+
+    fn now(&self) -> Now {
+        Now {
+            monotonic_ms: self.clock.monotonic_ms(),
+            unix_ms: self.clock.unix_ms(),
+        }
+    }
+
     pub fn tick(&mut self) {
+        self.lock_if_picker_overstayed();
         self.session.tick();
         self.drop_drafts_if_locked();
     }
@@ -904,6 +940,73 @@ mod tests {
     fn backgrounding_locks_by_default() {
         let (mut service, _, _) = unlocked();
         service.notify(SystemEvent::Backgrounded);
+        assert!(!service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn the_trip_to_the_file_picker_does_not_lock() {
+        let (mut service, _, clock) = unlocked();
+        service.expect_file_picker();
+        service.notify(SystemEvent::Backgrounded);
+        clock.advance_secs(60);
+        service.tick();
+        service.return_to_foreground();
+        assert!(service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn the_picker_excuse_is_used_up_by_one_trip() {
+        let (mut service, _, _) = unlocked();
+        service.expect_file_picker();
+        service.notify(SystemEvent::Backgrounded);
+        service.return_to_foreground();
+        service.notify(SystemEvent::Backgrounded);
+        assert!(!service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn a_second_departure_during_the_trip_locks() {
+        let (mut service, _, _) = unlocked();
+        service.expect_file_picker();
+        service.notify(SystemEvent::Backgrounded);
+        service.notify(SystemEvent::Backgrounded);
+        assert!(!service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn staying_away_too_long_locks_without_the_app_coming_back() {
+        let (mut service, _, clock) = unlocked();
+        service.expect_file_picker();
+        service.notify(SystemEvent::Backgrounded);
+        clock.advance_secs(121);
+        service.tick();
+        assert!(!service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn coming_back_too_late_locks() {
+        let (mut service, _, clock) = unlocked();
+        service.expect_file_picker();
+        service.notify(SystemEvent::Backgrounded);
+        clock.advance_secs(121);
+        service.return_to_foreground();
+        assert!(!service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn an_old_excuse_covers_nothing() {
+        let (mut service, _, clock) = unlocked();
+        service.expect_file_picker();
+        clock.advance_secs(121);
+        service.notify(SystemEvent::Backgrounded);
+        assert!(!service.status().unwrap().unlocked);
+    }
+
+    #[test]
+    fn the_excuse_does_not_cover_suspending() {
+        let (mut service, _, _) = unlocked();
+        service.expect_file_picker();
+        service.notify(SystemEvent::Suspended);
         assert!(!service.status().unwrap().unlocked);
     }
 

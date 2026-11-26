@@ -134,10 +134,19 @@ mod tests {
 
     #[test]
     fn every_code_the_plugin_sends_has_its_error() {
-        assert_eq!(error_from_code(Some("cancelled")), BiometricError::Cancelled);
+        assert_eq!(
+            error_from_code(Some("cancelled")),
+            BiometricError::Cancelled
+        );
         assert_eq!(error_from_code(Some("failed")), BiometricError::Failed);
-        assert_eq!(error_from_code(Some("invalidated")), BiometricError::Invalidated);
-        assert_eq!(error_from_code(Some("unavailable")), BiometricError::Unavailable);
+        assert_eq!(
+            error_from_code(Some("invalidated")),
+            BiometricError::Invalidated
+        );
+        assert_eq!(
+            error_from_code(Some("unavailable")),
+            BiometricError::Unavailable
+        );
     }
 
     #[test]
@@ -151,7 +160,10 @@ mod tests {
         let good = STANDARD.encode([7u8; VAULT_KEY_LENGTH]);
         assert_eq!(*key_from_base64(good).unwrap(), [7u8; VAULT_KEY_LENGTH]);
         let short = STANDARD.encode([7u8; 5]);
-        assert_eq!(key_from_base64(short).unwrap_err(), BiometricError::Platform);
+        assert_eq!(
+            key_from_base64(short).unwrap_err(),
+            BiometricError::Platform
+        );
         assert_eq!(
             key_from_base64("not base64!".into()).unwrap_err(),
             BiometricError::Platform

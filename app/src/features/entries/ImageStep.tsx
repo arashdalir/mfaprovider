@@ -45,6 +45,7 @@ export function ImageStep({
         <input
           id="qr-image"
           type="file"
+          onClick={() => void api.expectFilePicker()}
           accept="image/png,image/jpeg"
           disabled={busy}
           onChange={(event) => void choose(event)}

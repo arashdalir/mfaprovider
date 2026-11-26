@@ -7,6 +7,7 @@ pub mod dto;
 pub mod error;
 #[cfg(test)]
 mod no_secrets;
+mod picker_excuse;
 #[cfg(test)]
 mod registration;
 pub mod service;

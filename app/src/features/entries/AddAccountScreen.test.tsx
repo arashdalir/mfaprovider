@@ -154,6 +154,13 @@ describe("pasting a link", () => {
 });
 
 describe("reading an image", () => {
+  it("announces the file picker, so a phone does not lock on the way there", async () => {
+    const { api } = open();
+    await userEvent.click(screen.getByRole("button", { name: "Read a QR code from an image" }));
+    await userEvent.click(screen.getByLabelText(/Choose a PNG or JPEG/));
+    expect(api.expectFilePicker).toHaveBeenCalledTimes(1);
+  });
+
   it("sends the file as base64 and reviews the single account found", async () => {
     const { api } = open({ draftFromImage: vi.fn().mockResolvedValue([alice]) });
     await userEvent.click(screen.getByRole("button", { name: "Read a QR code from an image" }));

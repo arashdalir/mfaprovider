@@ -70,9 +70,9 @@ export function SessionGate({ children }: { children: (actions: SessionActions) 
       return;
     }
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        void api.reportBackgrounded().then(() => refresh(true));
-      }
+      const report =
+        document.visibilityState === "hidden" ? api.reportBackgrounded : api.reportForegrounded;
+      void report().then(() => refresh(true));
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);

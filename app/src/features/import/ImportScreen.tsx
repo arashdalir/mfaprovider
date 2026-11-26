@@ -139,6 +139,7 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
         <input
           id="import-file"
           type="file"
+          onClick={() => void api.expectFilePicker()}
           accept=".txt,.json,.zip,text/plain,application/json,application/zip"
           disabled={busy || format === ""}
           onChange={(event) => void choose(event)}

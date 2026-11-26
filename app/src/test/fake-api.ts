@@ -25,6 +25,8 @@ export function fakeApi(overrides: Partial<VaultApi> = {}): VaultApi {
     draftFromImage: vi.fn().mockResolvedValue([]),
     addDraft: vi.fn().mockResolvedValue("new-id"),
     reportBackgrounded: vi.fn().mockResolvedValue(undefined),
+    reportForegrounded: vi.fn().mockResolvedValue(undefined),
+    expectFilePicker: vi.fn().mockResolvedValue(undefined),
     biometricStatus: vi
       .fn()
       .mockResolvedValue({ available: false, enabled: false, password_due: false, reprompt_days: 7 }),

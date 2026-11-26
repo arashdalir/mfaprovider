@@ -79,6 +79,9 @@ export const ipc = {
   lock: () => call<void>("lock"),
   /** The app left the screen; the core locks the vault if its policy says so. */
   reportBackgrounded: () => call<void>("report_backgrounded"),
+  reportForegrounded: () => call<void>("report_foregrounded"),
+  /** Call as the user opens a file picker, so that on a phone the trip does not lock. */
+  expectFilePicker: () => call<void>("expect_file_picker"),
   recordActivity: () => call<void>("record_activity"),
   setIdleLock: (seconds: number | null) => call<void>("set_idle_lock", { seconds }),
   listEntries: () => call<EntryView[]>("list_entries"),

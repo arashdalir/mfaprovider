@@ -18,3 +18,4 @@
 | [0014](0014-password-protected-zip-import.md) | Password-protected ZIP import: `zip` crate, minimal features, hard limits | accepted |
 | [0015](0015-android-application-id-differs-from-code-namespace.md) | Android application id keeps the underscore; code namespace does not (`applicationId` vs `namespace`) | proposed |
 | [0016](0016-android-biometric-unlock-plugin.md) | Android biometric unlock: own Kotlin plugin, Keystore key bound to the biometric, core unlocks with a key | proposed |
+| [0017](0017-file-picker-does-not-lock.md) | The trip to a phone's file picker does not lock the vault (one departure, 2 minutes) | proposed |

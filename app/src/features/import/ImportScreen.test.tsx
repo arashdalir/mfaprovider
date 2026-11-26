@@ -45,6 +45,13 @@ async function pick(file = exportFile()) {
 }
 
 describe("choosing the file", () => {
+  it("announces the file picker, so a phone does not lock on the way there", async () => {
+    const { api } = open();
+    await screen.findByRole("option", { name: /otpauth/ });
+    await userEvent.click(screen.getByLabelText("Choose the export file"));
+    expect(api.expectFilePicker).toHaveBeenCalledTimes(1);
+  });
+
   it("offers the formats and sends the chosen file to the core as base64", async () => {
     const { api } = open({
       importPreview: vi.fn().mockResolvedValue(preview([item({ item_id: 0 })])),

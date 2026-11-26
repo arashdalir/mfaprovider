@@ -108,6 +108,21 @@ pub async fn report_backgrounded(state: State<'_, AppState>) -> Result<(), IpcEr
 }
 
 #[tauri::command]
+pub async fn report_foregrounded(state: State<'_, AppState>) -> Result<(), IpcError> {
+    state.service().return_to_foreground();
+    Ok(())
+}
+
+/// Only a phone's file picker takes the app off the screen; on a desktop nothing is excused.
+#[tauri::command]
+pub async fn expect_file_picker(state: State<'_, AppState>) -> Result<(), IpcError> {
+    if cfg!(mobile) {
+        state.service().expect_file_picker();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn record_activity(state: State<'_, AppState>) -> Result<(), IpcError> {
     state.service().record_activity();
     Ok(())

@@ -15,6 +15,8 @@ const COMMANDS: &[&str] = &[
     "lock",
     "record_activity",
     "report_backgrounded",
+    "report_foregrounded",
+    "expect_file_picker",
     "set_idle_lock",
     "list_entries",
     "add_entry",

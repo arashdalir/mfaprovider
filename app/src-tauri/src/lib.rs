@@ -58,7 +58,10 @@ pub fn run() {
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
-            app.manage(AppState::new(directory.join("vault.mfa"), biometric_provider(app)));
+            app.manage(AppState::new(
+                directory.join("vault.mfa"),
+                biometric_provider(app),
+            ));
             spawn_idle_ticker(app.handle().clone());
             Ok(())
         })
@@ -75,6 +78,8 @@ pub fn run() {
             commands::lock,
             commands::record_activity,
             commands::report_backgrounded,
+            commands::report_foregrounded,
+            commands::expect_file_picker,
             commands::set_idle_lock,
             commands::list_entries,
             commands::add_entry,

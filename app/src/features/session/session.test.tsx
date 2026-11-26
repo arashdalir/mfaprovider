@@ -159,12 +159,13 @@ describe("SessionGate", () => {
     hideDocument("visible");
   });
 
-  it("ignores the app coming back to the screen", async () => {
+  it("reports coming back to the screen, without locking", async () => {
     const api = fakeApi({ vaultStatus: vi.fn().mockResolvedValue({ exists: true, unlocked: true }) });
     render(withApi(api, <SessionGate>{open}</SessionGate>));
     await screen.findByText("the vault is open");
     act(() => hideDocument("visible"));
     expect(api.reportBackgrounded).not.toHaveBeenCalled();
+    expect(api.reportForegrounded).toHaveBeenCalledTimes(1);
   });
 
   it("shows the content once unlocked and locks on request", async () => {
