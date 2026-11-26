@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,6 +24,54 @@ function open(setIdleLock = vi.fn().mockResolvedValue(undefined)) {
   );
   return { api, onThemeChange, onClose };
 }
+
+describe("SettingsScreen biometrics", () => {
+  const status = (over: object) =>
+    vi.fn().mockResolvedValue({ available: true, enabled: false, password_due: false, reprompt_days: 7, ...over });
+
+  function openWith(biometricStatus: ReturnType<typeof vi.fn>, extra = {}) {
+    const api = fakeApi({ biometricStatus, ...extra });
+    render(
+      <ApiContext.Provider value={api}>
+        <SettingsScreen theme="system" onThemeChange={vi.fn()} onClose={vi.fn()} />
+      </ApiContext.Provider>,
+    );
+    return api;
+  }
+
+  it("shows no switch where the device has no biometrics", async () => {
+    const api = openWith(status({ available: false }));
+    await waitFor(() => expect(api.biometricStatus).toHaveBeenCalled());
+    expect(screen.queryByLabelText("Unlock with fingerprint or face")).not.toBeInTheDocument();
+  });
+
+  it("turns it on only after the master password is typed", async () => {
+    const api = openWith(status({}));
+    await userEvent.click(await screen.findByLabelText("Unlock with fingerprint or face"));
+    expect(api.biometricEnable).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText("Master password"), "pw");
+    await userEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(api.biometricEnable).toHaveBeenCalledWith("pw");
+  });
+
+  it("says so when the password is wrong and keeps it off", async () => {
+    openWith(status({}), {
+      biometricEnable: vi.fn().mockRejectedValue(new IpcCallError({ code: "wrong_password", message: null })),
+    });
+    await userEvent.click(await screen.findByLabelText("Unlock with fingerprint or face"));
+    await userEvent.type(screen.getByLabelText("Master password"), "nope{enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password.");
+    expect(screen.getByLabelText("Master password")).toHaveValue("");
+  });
+
+  it("turns it off and changes the re-prompt period", async () => {
+    const api = openWith(status({ enabled: true }));
+    await userEvent.selectOptions(await screen.findByLabelText("Ask for the password again after"), "30");
+    expect(api.setBiometricRepromptDays).toHaveBeenCalledWith(30);
+    await userEvent.click(screen.getByLabelText("Unlock with fingerprint or face"));
+    expect(api.biometricDisable).toHaveBeenCalled();
+  });
+});
 
 describe("SettingsScreen", () => {
   it("starts from the defaults", () => {

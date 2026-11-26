@@ -84,6 +84,42 @@ describe("UnlockScreen", () => {
     expect(screen.getByLabelText("Master password")).toHaveValue("");
   });
 
+  const bio = (over: object) =>
+    vi.fn().mockResolvedValue({ available: true, enabled: true, password_due: false, reprompt_days: 7, ...over });
+
+  it("offers no fingerprint button when it is off", async () => {
+    const api = fakeApi();
+    render(withApi(api, <UnlockScreen onUnlocked={vi.fn()} />));
+    await waitFor(() => expect(api.biometricStatus).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /fingerprint/ })).not.toBeInTheDocument();
+  });
+
+  it("unlocks with the fingerprint button", async () => {
+    const api = fakeApi({ biometricStatus: bio({}) });
+    const onUnlocked = vi.fn();
+    render(withApi(api, <UnlockScreen onUnlocked={onUnlocked} />));
+    await userEvent.click(await screen.findByRole("button", { name: /fingerprint/ }));
+    await waitFor(() => expect(onUnlocked).toHaveBeenCalled());
+    expect(api.unlockWithBiometric).toHaveBeenCalled();
+  });
+
+  it("asks for the password instead when it is due", async () => {
+    render(withApi(fakeApi({ biometricStatus: bio({ password_due: true }) }), <UnlockScreen onUnlocked={vi.fn()} />));
+    expect(await screen.findByText(/type your password once/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /fingerprint/ })).not.toBeInTheDocument();
+  });
+
+  it("shows why a fingerprint unlock failed and re-reads the status", async () => {
+    const api = fakeApi({
+      biometricStatus: bio({}),
+      unlockWithBiometric: vi.fn().mockRejectedValue(new IpcCallError({ code: "biometric_invalidated", message: null })),
+    });
+    render(withApi(api, <UnlockScreen onUnlocked={vi.fn()} />));
+    await userEvent.click(await screen.findByRole("button", { name: /fingerprint/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/switched off/);
+    await waitFor(() => expect(api.biometricStatus).toHaveBeenCalledTimes(2));
+  });
+
   it("cannot be submitted empty", () => {
     render(withApi(fakeApi(), <UnlockScreen onUnlocked={vi.fn()} />));
     expect(screen.getByRole("button", { name: "Unlock" })).toBeDisabled();

@@ -24,6 +24,13 @@ export function fakeApi(overrides: Partial<VaultApi> = {}): VaultApi {
     draftFromLink: vi.fn().mockResolvedValue([]),
     draftFromImage: vi.fn().mockResolvedValue([]),
     addDraft: vi.fn().mockResolvedValue("new-id"),
+    biometricStatus: vi
+      .fn()
+      .mockResolvedValue({ available: false, enabled: false, password_due: false, reprompt_days: 7 }),
+    biometricEnable: vi.fn().mockResolvedValue(undefined),
+    biometricDisable: vi.fn().mockResolvedValue(undefined),
+    unlockWithBiometric: vi.fn().mockResolvedValue(undefined),
+    setBiometricRepromptDays: vi.fn().mockResolvedValue(undefined),
     checkDuplicate: vi.fn().mockResolvedValue(null),
     checkDraftDuplicate: vi.fn().mockResolvedValue(null),
     discardDrafts: resolved(),

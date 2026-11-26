@@ -2,6 +2,7 @@
 // typed function here; `no-restricted-imports` stops other files importing Tauri's `invoke`.
 import { invoke } from "@tauri-apps/api/core";
 
+import type { BiometricStatus } from "./generated/BiometricStatus";
 import type { DraftEditsRequest } from "./generated/DraftEditsRequest";
 import type { DraftView } from "./generated/DraftView";
 import type { DuplicateView } from "./generated/DuplicateView";
@@ -24,7 +25,7 @@ import type { VaultStatus } from "./generated/VaultStatus";
 export type {
   CodeState,
 } from "./generated/CodeState";
-export type { DraftEditsRequest, DraftView };
+export type { BiometricStatus, DraftEditsRequest, DraftView };
 export type {
   ImportChoice,
   ImportDecision,
@@ -98,6 +99,13 @@ export const ipc = {
     call<DuplicateView | null>("check_duplicate", { request }),
   checkDraftDuplicate: (id: number, edits: DraftEditsRequest) =>
     call<DuplicateView | null>("check_draft_duplicate", { id, edits }),
+  biometricStatus: () => call<BiometricStatus>("biometric_status"),
+  /** Asks for the master password again before the device keeps a copy of the vault key. */
+  biometricEnable: (password: string) => call<void>("biometric_enable", { password }),
+  biometricDisable: () => call<void>("biometric_disable"),
+  unlockWithBiometric: () => call<void>("unlock_with_biometric"),
+  setBiometricRepromptDays: (days: number) =>
+    call<void>("set_biometric_reprompt_days", { days }),
   discardDrafts: () => call<void>("discard_drafts"),
   listImportFormats: () => call<ImportFormatView[]>("list_import_formats"),
   /**

@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApi } from "@/ipc/api-context";
+import type { BiometricStatus } from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
 
 export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
@@ -12,6 +13,26 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [biometrics, setBiometrics] = useState<BiometricStatus | null>(null);
+
+  useEffect(() => {
+    api.biometricStatus().then(setBiometrics, () => setBiometrics(null));
+  }, [api]);
+
+  async function unlockWithBiometrics() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await api.unlockWithBiometric();
+      onUnlocked();
+    } catch (error) {
+      setProblem(describeError(error));
+      api.biometricStatus().then(setBiometrics, () => setBiometrics(null));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -37,6 +58,22 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {biometrics?.enabled && !biometrics.password_due && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="mb-4 w-full"
+            disabled={busy}
+            onClick={() => void unlockWithBiometrics()}
+          >
+            Unlock with fingerprint or face
+          </Button>
+        )}
+        {biometrics?.enabled && biometrics.password_due && (
+          <p className="mb-4 text-sm text-muted-foreground">
+            It has been a while: please type your password once.
+          </p>
+        )}
         <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
           <div className="flex flex-col gap-2">
             <Label htmlFor="password">Master password</Label>
