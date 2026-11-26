@@ -6,6 +6,7 @@ pub mod platform;
 use std::time::Duration;
 
 use mfa_core::biometric::{BiometricProvider, NoBiometrics};
+use mfa_core::vault::SystemEvent;
 use tauri::Manager;
 
 use ipc::commands::{self, AppState};
@@ -20,6 +21,21 @@ fn spawn_idle_ticker(handle: tauri::AppHandle) {
             handle.state::<AppState>().service().tick();
         }
     });
+}
+
+/// Minimising shows up as a resize to nothing and a lost focus; both are checked because the
+/// order differs between platforms. Merely clicking another window does not lock.
+fn lock_when_minimized(window: &tauri::Window, event: &tauri::WindowEvent) {
+    let leaving = matches!(
+        event,
+        tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(false)
+    );
+    if !leaving || !window.is_minimized().unwrap_or(false) {
+        return;
+    }
+    if let Some(state) = window.try_state::<AppState>() {
+        state.service().notify(SystemEvent::Backgrounded);
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -38,6 +54,7 @@ pub fn run() {
     #[cfg(target_os = "android")]
     let builder = builder.plugin(keystore::init());
     builder
+        .on_window_event(lock_when_minimized)
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
