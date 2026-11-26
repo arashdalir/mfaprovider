@@ -10,6 +10,8 @@ use std::collections::BTreeMap;
 use mfa_core::otp::{OtpRegistry, ParamKind, ParamSpec, Params};
 use mfa_core::secret::Secret;
 use mfa_core::vault::{CodeOutcome, Entry, EntryChanges, EntryCode, EntryId, NewEntry, VaultData};
+use mfa_formats::otpauth::to_otpauth;
+use mfa_formats::qr_encode::qr_svg;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -88,12 +90,16 @@ pub struct EntryChangesRequest {
 #[ts(export)]
 pub struct RevealedSecret {
     pub secret_base32: String,
+    /// The account as a QR code (SVG) another device can scan; absent for types without an
+    /// `otpauth://` form. The link it encodes never leaves the core.
+    pub qr_svg: Option<String>,
 }
 
 impl RevealedSecret {
     pub fn of(entry: &Entry) -> Self {
         Self {
             secret_base32: entry.secret.to_base32().to_string(),
+            qr_svg: to_otpauth(entry).ok().and_then(|link| qr_svg(&link).ok()),
         }
     }
 }
@@ -607,5 +613,23 @@ mod tests {
             revealed.secret_base32,
             Secret::new(SEED.to_vec()).to_base32().as_str()
         );
+    }
+
+    #[test]
+    fn reveal_also_returns_a_qr_picture_without_the_link_in_it() {
+        let (data, id) = sample();
+        let revealed = RevealedSecret::of(data.entry(id).unwrap());
+        let picture = revealed.qr_svg.expect("a totp entry has a QR code");
+        assert!(picture.contains("<svg"));
+        assert!(!picture.contains(&revealed.secret_base32));
+        assert!(!picture.contains("otpauth"));
+    }
+
+    #[test]
+    fn a_type_without_a_link_form_has_no_qr_picture() {
+        let (mut data, id) = sample();
+        data.entries[0].otp_type = "mystery".into();
+        let revealed = RevealedSecret::of(data.entry(id).unwrap());
+        assert!(revealed.qr_svg.is_none());
     }
 }

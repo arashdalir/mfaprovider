@@ -8,7 +8,12 @@ import { describeError } from "@/ipc/error-message";
 
 export const REVEAL_VISIBLE_MS = 30_000;
 
-type Phase = { kind: "hidden" } | { kind: "asking" } | { kind: "shown"; secret: string };
+type Phase =
+  | { kind: "hidden" }
+  | { kind: "asking" }
+  | { kind: "shown"; secret: string; qrSvg: string | null };
+
+const svgSource = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
 /** Shows an account's secret key, but only after the master password is entered again. */
 export function RevealSecret({ entryId }: { entryId: string }) {
@@ -32,10 +37,10 @@ export function RevealSecret({ entryId }: { entryId: string }) {
     event.stopPropagation();
     setBusy(true);
     try {
-      const { secret_base32 } = await api.revealSecret(entryId, password);
+      const { secret_base32, qr_svg } = await api.revealSecret(entryId, password);
       setPassword("");
       setProblem(null);
-      setPhase({ kind: "shown", secret: secret_base32 });
+      setPhase({ kind: "shown", secret: secret_base32, qrSvg: qr_svg });
     } catch (error) {
       setPassword("");
       setProblem(describeError(error));
@@ -51,6 +56,18 @@ export function RevealSecret({ entryId }: { entryId: string }) {
         <code aria-label="Secret key" className="break-all font-mono">
           {phase.secret}
         </code>
+        {phase.qrSvg !== null && (
+          <>
+            <img
+              alt="QR code of this account"
+              src={svgSource(phase.qrSvg)}
+              className="size-56 self-center rounded-md bg-white"
+            />
+            <p className="text-sm text-muted-foreground">
+              Scan it with the other device's authenticator. Anyone who scans it gets this account.
+            </p>
+          </>
+        )}
         <Button type="button" variant="outline" className="self-start" onClick={() => setPhase({ kind: "hidden" })}>
           Hide
         </Button>

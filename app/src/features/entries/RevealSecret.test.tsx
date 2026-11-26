@@ -8,7 +8,7 @@ import { fakeApi } from "@/test/fake-api";
 
 import { REVEAL_VISIBLE_MS, RevealSecret } from "./RevealSecret";
 
-function open(revealSecret = vi.fn().mockResolvedValue({ secret_base32: "JBSWY3DPEHPK3PXP" })) {
+function open(revealSecret = vi.fn().mockResolvedValue({ secret_base32: "JBSWY3DPEHPK3PXP", qr_svg: null })) {
   const api = fakeApi({ revealSecret });
   const view = render(
     <ApiContext.Provider value={api}>
@@ -47,6 +47,29 @@ describe("RevealSecret", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password.");
     expect(screen.getByLabelText("Master password")).toHaveValue("");
     expect(screen.queryByLabelText("Secret key")).not.toBeInTheDocument();
+  });
+
+  it("shows the account's QR code next to the key, and hides it with the key", async () => {
+    open(
+      vi.fn().mockResolvedValue({
+        secret_base32: "JBSWY3DPEHPK3PXP",
+        qr_svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Show secret key…" }));
+    await userEvent.type(screen.getByLabelText("Master password"), "pw{enter}");
+    const picture = await screen.findByRole("img", { name: "QR code of this account" });
+    expect(picture.getAttribute("src")).toMatch(/^data:image\/svg\+xml;charset=utf-8,%3Csvg/);
+    await userEvent.click(screen.getByRole("button", { name: "Hide" }));
+    expect(screen.queryByRole("img", { name: "QR code of this account" })).not.toBeInTheDocument();
+  });
+
+  it("shows no picture for a type that has no QR form", async () => {
+    open();
+    await userEvent.click(screen.getByRole("button", { name: "Show secret key…" }));
+    await userEvent.type(screen.getByLabelText("Master password"), "pw{enter}");
+    await screen.findByLabelText("Secret key");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("hides the secret on request", async () => {

@@ -2088,6 +2088,7 @@ dependencies = [
  "mfa-core",
  "percent-encoding",
  "png",
+ "qrcode",
  "rqrr",
  "serde",
  "serde_json",

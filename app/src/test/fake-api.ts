@@ -19,7 +19,7 @@ export function fakeApi(overrides: Partial<VaultApi> = {}): VaultApi {
     deleteEntry: resolved(),
     moveEntry: resolved(),
     advanceCounter: resolved(),
-    revealSecret: vi.fn().mockResolvedValue({ secret_base32: "" }),
+    revealSecret: vi.fn().mockResolvedValue({ secret_base32: "", qr_svg: null }),
     changePassword: resolved(),
     draftFromLink: vi.fn().mockResolvedValue([]),
     draftFromImage: vi.fn().mockResolvedValue([]),

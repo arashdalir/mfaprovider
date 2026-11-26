@@ -3,4 +3,9 @@
 /**
  * The seed of one entry, returned only after the user re-enters the master password.
  */
-export type RevealedSecret = { secret_base32: string, };
+export type RevealedSecret = { secret_base32: string, 
+/**
+ * The account as a QR code (SVG) another device can scan; absent for types without an
+ * `otpauth://` form. The link it encodes never leaves the core.
+ */
+qr_svg: string | null, };

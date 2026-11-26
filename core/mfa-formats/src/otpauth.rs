@@ -8,9 +8,10 @@
 
 use mfa_core::otp::{OtpRegistry, Params};
 use mfa_core::secret::Secret;
-use mfa_core::vault::{EntryError, NewEntry};
-use percent_encoding::percent_decode_str;
+use mfa_core::vault::{Entry, EntryError, NewEntry};
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 pub const MAX_URI_BYTES: usize = 2048;
 const SCHEME: &str = "otpauth://";
@@ -110,6 +111,49 @@ fn params_for(otp_type: &str, query: &Query) -> Result<Params, OtpauthError> {
             Some(value) => params.with(name, value.trim()),
             None => params,
         }))
+}
+
+const UNRESERVED: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'_')
+    .remove(b'.')
+    .remove(b'~');
+
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error("the account type `{0}` has no otpauth:// form")]
+pub struct NoLinkForm(pub String);
+
+/// The link an authenticator app scans for `entry`: the exact inverse of [`parse_otpauth`].
+/// It contains the secret, so it is returned in a zeroising buffer.
+///
+/// # Errors
+/// If the type is not one `otpauth://` can express (only `totp`, `hotp` and `steam`).
+pub fn to_otpauth(entry: &Entry) -> Result<Zeroizing<String>, NoLinkForm> {
+    let otp_type = entry.otp_type.as_str();
+    if !matches!(otp_type, "totp" | "hotp" | "steam") {
+        return Err(NoLinkForm(otp_type.chars().take(MAX_TYPE_ECHO).collect()));
+    }
+    let escape = |text: &str| utf8_percent_encode(text, UNRESERVED).to_string();
+    let label = if entry.issuer.is_empty() {
+        escape(&entry.account)
+    } else {
+        format!("{}:{}", escape(&entry.issuer), escape(&entry.account))
+    };
+    let mut link = Zeroizing::new(format!(
+        "{SCHEME}{otp_type}/{label}?secret={}",
+        entry.secret.to_base32().as_str()
+    ));
+    if !entry.issuer.is_empty() {
+        link.push_str("&issuer=");
+        link.push_str(&escape(&entry.issuer));
+    }
+    for (name, value) in entry.params.iter() {
+        link.push_str(&format!("&{name}={}", escape(value)));
+    }
+    if otp_type == "hotp" && entry.params.get("counter").is_none() {
+        link.push_str("&counter=0");
+    }
+    Ok(link)
 }
 
 /// `issuer:account` or just `account`; whitespace around either part is dropped.
@@ -455,5 +499,81 @@ mod tests {
     fn a_parsed_entry_never_prints_its_secret() {
         let entry = ok(&format!("otpauth://totp/me?secret={SECRET}"));
         assert!(!format!("{entry:?}").contains(SECRET));
+    }
+
+    mod link_building {
+        use super::*;
+        use mfa_core::vault::{EntryId, Extra};
+
+        fn as_entry(new: NewEntry) -> Entry {
+            Entry {
+                id: EntryId::from_bytes([7; 16]),
+                otp_type: new.otp_type,
+                issuer: new.issuer,
+                account: new.account,
+                secret: new.secret,
+                params: new.params,
+                icon: None,
+                tags: Vec::new(),
+                notes: String::new(),
+                created_at: 0,
+                updated_at: 0,
+                extra: Extra::new(),
+            }
+        }
+
+        fn link_of(uri: &str) -> String {
+            to_otpauth(&as_entry(ok(uri))).unwrap().to_string()
+        }
+
+        fn same_account_after_a_round_trip(uri: &str) {
+            let original = ok(uri);
+            let again = ok(&link_of(uri));
+            assert_eq!(again, original, "{uri}");
+        }
+
+        #[test]
+        fn what_is_built_parses_back_to_the_same_account() {
+            for uri in [
+                format!("otpauth://totp/Example:alice@google.com?secret={SECRET}&issuer=Example"),
+                format!("otpauth://totp/bob?secret={SECRET}"),
+                format!("otpauth://totp/Acme:x?secret={SECRET}&algorithm=SHA512&digits=8&period=60&issuer=Acme"),
+                format!("otpauth://hotp/Acme:x?secret={SECRET}&counter=42&issuer=Acme"),
+                format!("otpauth://steam/Steam:me?secret={SECRET}&issuer=Steam"),
+                format!("otpauth://totp/Caf%C3%A9%20%26%20Co:j%C3%BCrgen%2Bone%40x.de?secret={SECRET}&issuer=Caf%C3%A9%20%26%20Co"),
+            ] {
+                same_account_after_a_round_trip(&uri);
+            }
+        }
+
+        #[test]
+        fn the_link_keeps_issuer_and_account_apart_even_with_colons_and_spaces() {
+            let link = link_of(&format!(
+                "otpauth://totp/My%20Co:a%3Ab?secret={SECRET}&issuer=My%20Co"
+            ));
+            assert!(
+                link.starts_with("otpauth://totp/My%20Co:a%3Ab?secret="),
+                "{link}"
+            );
+            assert!(link.ends_with("&issuer=My%20Co"), "{link}");
+        }
+
+        #[test]
+        fn counter_accounts_always_carry_a_counter() {
+            let mut entry = as_entry(ok(&format!("otpauth://hotp/x?secret={SECRET}&counter=0")));
+            entry.params = Params::new();
+            let link = to_otpauth(&entry).unwrap();
+            assert!(link.ends_with("&counter=0"), "{}", link.as_str());
+        }
+
+        #[test]
+        fn types_without_a_link_form_are_refused() {
+            let mut entry = as_entry(ok(&format!("otpauth://totp/x?secret={SECRET}")));
+            entry.otp_type = "mystery".into();
+            assert_eq!(
+                to_otpauth(&entry).unwrap_err(),
+                NoLinkForm("mystery".into())
+            );
+        }
     }
 }

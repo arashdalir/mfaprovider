@@ -7,3 +7,4 @@ pub mod merge;
 pub mod migration;
 pub mod otpauth;
 pub mod qr;
+pub mod qr_encode;
