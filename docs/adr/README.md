@@ -16,3 +16,4 @@
 | [0013](0013-qr-image-decoding.md) | QR image decoding: `rqrr` + `png` + `zune-jpeg` with hard input limits | accepted |
 | [0010](0010-self-hosted-server-mode.md) | Self-hosted server mode (web access to codes); supersedes ADR-0006's "no server" non-goal | proposed |
 | [0014](0014-password-protected-zip-import.md) | Password-protected ZIP import: `zip` crate, minimal features, hard limits | accepted |
+| [0015](0015-android-application-id-differs-from-code-namespace.md) | Android application id keeps the underscore; code namespace does not (`applicationId` vs `namespace`) | proposed |

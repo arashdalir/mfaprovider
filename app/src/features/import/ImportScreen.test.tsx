@@ -77,6 +77,12 @@ describe("choosing the file", () => {
     expect(api.importPreview).not.toHaveBeenCalled();
   });
 
+  it("lets the file picker offer text, JSON and ZIP files", async () => {
+    open();
+    const accept = (await screen.findByLabelText("Choose the export file")).getAttribute("accept");
+    expect(accept?.split(",")).toEqual(expect.arrayContaining([".txt", ".json", ".zip"]));
+  });
+
   it("can go back without importing", async () => {
     const { onClose } = open();
     await userEvent.click(await screen.findByRole("button", { name: "Back" }));
