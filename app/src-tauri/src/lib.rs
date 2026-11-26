@@ -1,8 +1,11 @@
 pub mod ipc;
+#[cfg(any(target_os = "android", test))]
+mod keystore;
 pub mod platform;
 
 use std::time::Duration;
 
+use mfa_core::biometric::{BiometricProvider, NoBiometrics};
 use tauri::Manager;
 
 use ipc::commands::{self, AppState};
@@ -19,13 +22,26 @@ fn spawn_idle_ticker(handle: tauri::AppHandle) {
     });
 }
 
+#[cfg(target_os = "android")]
+fn biometric_provider(app: &tauri::App) -> Box<dyn BiometricProvider> {
+    Box::new(keystore::AndroidBiometrics::from_app(app.handle()))
+}
+
+#[cfg(not(target_os = "android"))]
+fn biometric_provider(_app: &tauri::App) -> Box<dyn BiometricProvider> {
+    Box::new(NoBiometrics)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(keystore::init());
+    builder
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
-            app.manage(AppState::new(directory.join("vault.mfa")));
+            app.manage(AppState::new(directory.join("vault.mfa"), biometric_provider(app)));
             spawn_idle_ticker(app.handle().clone());
             Ok(())
         })

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiContext } from "@/ipc/api-context";
-import { IpcCallError } from "@/ipc/client";
+import { IpcCallError, type BiometricStatus } from "@/ipc/client";
 import { fakeApi } from "@/test/fake-api";
 
 import { SettingsScreen } from "./SettingsScreen";
@@ -29,7 +29,7 @@ describe("SettingsScreen biometrics", () => {
   const status = (over: object) =>
     vi.fn().mockResolvedValue({ available: true, enabled: false, password_due: false, reprompt_days: 7, ...over });
 
-  function openWith(biometricStatus: ReturnType<typeof vi.fn>, extra = {}) {
+  function openWith(biometricStatus: () => Promise<BiometricStatus>, extra = {}) {
     const api = fakeApi({ biometricStatus, ...extra });
     render(
       <ApiContext.Provider value={api}>

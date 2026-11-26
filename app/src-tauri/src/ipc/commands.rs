@@ -3,7 +3,7 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use mfa_core::biometric::NoBiometrics;
+use mfa_core::biometric::BiometricProvider;
 use mfa_storage::FileStorage;
 use tauri::State;
 use zeroize::Zeroizing;
@@ -23,11 +23,11 @@ pub type Service = VaultService<FileStorage, SystemClock, OsRng>;
 pub struct AppState(Mutex<Service>);
 
 impl AppState {
-    pub fn new(vault_path: std::path::PathBuf) -> Self {
+    pub fn new(vault_path: std::path::PathBuf, biometrics: Box<dyn BiometricProvider>) -> Self {
         let settings = FileSettings::new(vault_path.with_file_name("device.json"));
         let service =
             VaultService::new(FileStorage::new(vault_path), SystemClock::default(), OsRng)
-                .with_biometrics(Box::new(NoBiometrics), Box::new(settings));
+                .with_biometrics(biometrics, Box::new(settings));
         Self(Mutex::new(service))
     }
 
