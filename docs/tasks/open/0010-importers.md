@@ -9,7 +9,7 @@
 Importers behind one `Importer` interface in `mfa-formats` for Google Authenticator `otpauth-migration://`, Aegis (plain + encrypted) and 2FAS, with the preview-then-merge flow: new / duplicate / conflicting entries, per-entry skip, replace or keep-both. Duplicate = same issuer + account + secret.
 
 ## Acceptance criteria
-- [ ] `Importer` interface; one isolated codec per source (interface + link-list codec done; Google, Aegis, 2FAS open)
+- [ ] `Importer` interface; one isolated codec per source (interface, link-list and Google migration codecs done; Aegis, 2FAS open)
 - [ ] Fixtures per format (including encrypted Aegis) with provenance noted; no real seeds in the repo
 - [x] Merge planner returns a preview without mutating the vault; applying it is a separate step
 - [x] UI import wizard: pick file → preview → apply (file only; URI paste via TASK-0009; not clicked through in the real app)
@@ -33,6 +33,8 @@ Importers behind one `Importer` interface in `mfa-formats` for Google Authentica
 - 2026-11-24: Not done: Google `otpauth-migration://`, Aegis (plain + encrypted), 2FAS importers; the real-app click-through of the import wizard.
 
 - 2026-11-24: CI green on ada69f0 (all five jobs), including the UI tests under the default vitest pool: the local "failed to find the current suite" anomaly did not reproduce on the clean CI machine, so it is treated as a local-environment problem (a `tauri dev` session was running); left as is, to be revisited only if it returns.
+
+- 2026-11-26: **Google `otpauth-migration://` done** (core, shell, UI hint). `mfa-formats::migration`: `parse_migration_link` reads `data=` (percent-decoded; standard or URL-safe base64, padded or not; a raw `+` stays a plus) and a **minimal hand-written protobuf reader** (varints capped at 10 bytes, every length checked, unknown fields and fixed-size wire types skipped; no protobuf dependency — Claude's decision, recorded here instead of an ADR because it is ~100 lines, reversible and fully covered by tests). Fields used: secret, name, issuer, algorithm (unspecified/SHA-1 → default, SHA-256, SHA-512; MD5 skipped), digits (6 default, 8), type (HOTP with counter, TOTP), batch fields ignored. Unusable accounts are skipped with a fixed sentence and never fail the link; name `Issuer:account` is split when the issuer field is empty. `GoogleMigrationImporter` (id `google-migration`): one link per line, several links (batched exports) in one file. The Add-account link paste and QR image paths now accept migration links too (one draft per account). Tests: formats 97 (+14), shell 103 (+4); fixtures are invented byte-by-byte, no real export seen. **Not verified:** a real Google export (the user has not tried one); Google sometimes splits large exports into several QR codes, each must be scanned/pasted; the wizard in the real app.
 
 ## Next step
 Wait for CI. Then next importers on the same interface: Google `otpauth-migration://` (protobuf; QR codes from TASK-0009 already decode to the link text), Aegis plain, Aegis encrypted, 2FAS. Each with invented fixtures only.

@@ -13,6 +13,7 @@ use zeroize::Zeroizing;
 use mfa_formats::archive::{is_zip, read_single_file};
 use mfa_formats::import::{MAX_IMPORT_BYTES, all_importers, importer};
 use mfa_formats::merge::{Decision, MergeStatus, PlannedItem, build_ops, plan_merge};
+use mfa_formats::migration::{is_migration_link, parse_migration_link};
 use mfa_formats::otpauth::parse_otpauth;
 use mfa_formats::qr::{MAX_FILE_BYTES, decode_qr_image};
 
@@ -117,11 +118,11 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
         }
     }
 
-    /// Reads an `otpauth://` link into a draft, replacing any earlier drafts.
+    /// Reads an `otpauth://` link, or a Google Authenticator `otpauth-migration://` link
+    /// (which may hold several accounts), into drafts, replacing any earlier drafts.
     pub fn draft_from_link(&mut self, text: &str) -> Result<Vec<DraftView>, IpcError> {
         self.require_unlocked()?;
-        let draft = parse_otpauth(text, &self.registry)?;
-        self.drafts = vec![draft];
+        self.drafts = drafts_from_link(text, &self.registry)?;
         Ok(draft_views(&self.drafts))
     }
 
@@ -134,18 +135,17 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
         let mut drafts = Vec::new();
         let mut first_problem = None;
         for text in texts {
-            match parse_otpauth(&text, &self.registry) {
-                Ok(draft) => drafts.push(draft),
+            match drafts_from_link(&text, &self.registry) {
+                Ok(found) => drafts.extend(found),
                 Err(error) => {
                     first_problem.get_or_insert(error);
                 }
             }
         }
         if drafts.is_empty() {
-            return Err(first_problem.map_or_else(
-                || IpcError::invalid_input("the QR code is not an authenticator link"),
-                IpcError::from,
-            ));
+            return Err(first_problem.unwrap_or_else(|| {
+                IpcError::invalid_input("the QR code is not an authenticator link")
+            }));
         }
         self.drafts = drafts;
         Ok(draft_views(&self.drafts))
@@ -424,6 +424,23 @@ fn copy_definition(definition: &NewEntry) -> NewEntry {
         tags: definition.tags.clone(),
         notes: definition.notes.clone(),
     }
+}
+
+fn drafts_from_link(text: &str, registry: &OtpRegistry) -> Result<Vec<NewEntry>, IpcError> {
+    if !is_migration_link(text) {
+        return Ok(vec![parse_otpauth(text, registry)?]);
+    }
+    let batch = parse_migration_link(text, registry)
+        .map_err(|error| IpcError::invalid_input(error.to_string()))?;
+    if batch.entries.is_empty() {
+        let reason = batch
+            .skipped
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "the link holds no accounts".to_owned());
+        return Err(IpcError::invalid_input(reason));
+    }
+    Ok(batch.entries)
 }
 
 /// The bytes an importer reads: the file itself, or the one file inside a ZIP archive (opened
@@ -1186,8 +1203,8 @@ mod tests {
     fn the_formats_are_listed_without_needing_the_vault() {
         let (service, _, _) = service();
         let formats = service.import_formats();
-        assert_eq!(formats.len(), 1);
-        assert_eq!(formats[0].id, FORMAT);
+        let ids: Vec<_> = formats.iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(ids, [FORMAT, "google-migration"]);
     }
 
     #[test]
@@ -1661,5 +1678,105 @@ mod tests {
             .unwrap();
         assert_eq!(result.added, 1);
         assert_eq!(accounts(&mut service), ["one"]);
+    }
+
+    /// A Google Authenticator export link holding one TOTP account per `(name, secret)`.
+    fn migration_link(accounts: &[(&str, &[u8])]) -> String {
+        let mut message = Vec::new();
+        for (name, secret) in accounts {
+            let mut account = vec![0x0A, u8::try_from(secret.len()).unwrap()];
+            account.extend(*secret);
+            account.extend([0x12, u8::try_from(name.len()).unwrap()]);
+            account.extend(name.as_bytes());
+            account.extend([0x30, 0x02]);
+            message.extend([0x0A, u8::try_from(account.len()).unwrap()]);
+            message.extend(account);
+        }
+        format!(
+            "otpauth-migration://offline?data={}",
+            base64::engine::general_purpose::URL_SAFE.encode(message)
+        )
+    }
+
+    #[test]
+    fn a_google_export_link_becomes_one_draft_per_account_without_echoing_secrets() {
+        let (mut service, _, _) = unlocked();
+        let link = migration_link(&[("Acme:one", b"aaaaaaaaaa"), ("two", b"bbbbbbbbbb")]);
+        let drafts = service.draft_from_link(&link).unwrap();
+        let names: Vec<_> = drafts
+            .iter()
+            .map(|d| (d.issuer.as_str(), d.account.as_str()))
+            .collect();
+        assert_eq!(names, [("Acme", "one"), ("", "two")]);
+        let json = serde_json::to_string(&drafts).unwrap();
+        assert!(!json.contains("aaaaaaaaaa") && !json.contains("MFRGGZDF"));
+        service.add_draft(0, edits("one")).unwrap();
+        assert_eq!(accounts(&mut service), ["one"]);
+    }
+
+    #[test]
+    fn a_google_export_without_usable_accounts_says_why_instead_of_failing_blindly() {
+        let (mut service, _, _) = unlocked();
+        let no_data = migration_link(&[]);
+        assert_eq!(
+            service
+                .draft_from_link(&no_data)
+                .unwrap_err()
+                .message
+                .as_deref(),
+            Some("the link has no data")
+        );
+        let no_accounts = "otpauth-migration://offline?data=EAE%3D";
+        assert_eq!(
+            service
+                .draft_from_link(no_accounts)
+                .unwrap_err()
+                .message
+                .as_deref(),
+            Some("the link holds no accounts")
+        );
+        let no_secret = migration_link(&[("one", b"")]);
+        assert_eq!(
+            service
+                .draft_from_link(&no_secret)
+                .unwrap_err()
+                .message
+                .as_deref(),
+            Some("the account's settings are not valid")
+        );
+        let damaged = "otpauth-migration://offline?data=%%%";
+        assert_eq!(
+            service
+                .draft_from_link(damaged)
+                .unwrap_err()
+                .message
+                .as_deref(),
+            Some("the link's data is damaged")
+        );
+    }
+
+    #[test]
+    fn a_qr_image_with_google_export_codes_gives_their_accounts() {
+        let (mut service, _, _) = unlocked();
+        let first = migration_link(&[("one", b"aaaaaaaaaa")]);
+        let second = migration_link(&[("two", b"bbbbbbbbbb")]);
+        let drafts = service
+            .draft_from_image(&qr_png_base64(&[&first, &second]))
+            .unwrap();
+        assert_eq!(drafts.len(), 2);
+    }
+
+    #[test]
+    fn google_export_files_can_be_imported_through_the_wizard_path() {
+        let (mut service, _, _) = unlocked();
+        let file = migration_link(&[("one", b"aaaaaaaaaa"), ("two", b"bbbbbbbbbb")]);
+        let formats = service.import_formats();
+        assert!(formats.iter().any(|f| f.id == "google-migration"));
+        let preview = service
+            .import_preview("google-migration", file.as_bytes(), "")
+            .unwrap();
+        assert_eq!(preview.items.len(), 2);
+        service.import_apply(accept_defaults(&preview)).unwrap();
+        assert_eq!(accounts(&mut service), ["one", "two"]);
     }
 }

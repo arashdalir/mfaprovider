@@ -113,7 +113,7 @@ fn params_for(otp_type: &str, query: &Query) -> Result<Params, OtpauthError> {
 }
 
 /// `issuer:account` or just `account`; whitespace around either part is dropped.
-fn split_label(label: &str) -> (String, String) {
+pub(crate) fn split_label(label: &str) -> (String, String) {
     match label.split_once(':') {
         Some((issuer, account)) => (issuer.trim().to_owned(), account.trim().to_owned()),
         None => (String::new(), label.trim().to_owned()),

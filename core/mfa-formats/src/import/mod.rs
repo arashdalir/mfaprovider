@@ -2,8 +2,10 @@
 //! An importer only reads; merging with the vault is [`crate::merge`]'s job, so a preview can
 //! be shown before anything changes.
 
+mod google_migration;
 mod link_list;
 
+pub use google_migration::GoogleMigrationImporter;
 pub use link_list::LinkListImporter;
 
 use mfa_core::otp::OtpRegistry;
@@ -63,7 +65,10 @@ pub trait Importer: Send + Sync {
 
 #[must_use]
 pub fn all_importers() -> Vec<Box<dyn Importer>> {
-    vec![Box::new(LinkListImporter)]
+    vec![
+        Box::new(LinkListImporter),
+        Box::new(GoogleMigrationImporter),
+    ]
 }
 
 #[must_use]
@@ -141,8 +146,9 @@ mod tests {
     #[test]
     fn importers_are_found_by_id() {
         assert!(importer("otpauth-list").is_some());
+        assert!(importer("google-migration").is_some());
         assert!(importer("nonsense").is_none());
         let ids: Vec<_> = all_importers().iter().map(|i| i.id()).collect();
-        assert_eq!(ids, ["otpauth-list"]);
+        assert_eq!(ids, ["otpauth-list", "google-migration"]);
     }
 }

@@ -4,5 +4,6 @@
 pub mod archive;
 pub mod import;
 pub mod merge;
+pub mod migration;
 pub mod otpauth;
 pub mod qr;

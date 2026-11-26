@@ -47,6 +47,10 @@ export function LinkStep({
           onChange={(event) => setText(event.target.value)}
           disabled={busy}
         />
+        <p className="text-sm text-muted-foreground">
+          Also accepts a Google Authenticator export link (otpauth-migration://); every account in it is
+          offered for review.
+        </p>
       </div>
       {problem && (
         <p role="alert" className="text-sm text-destructive">
