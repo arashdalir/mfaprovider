@@ -85,6 +85,27 @@ pub struct EntryChangesRequest {
     pub notes: Option<String>,
 }
 
+/// How a candidate relates to an account the vault already holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DuplicateKind {
+    /// Same name and same key: the account is already there.
+    SameAccount,
+    /// Same name, different key: perhaps a second account at the same service.
+    SameNameOtherKey,
+    /// Same key under another name: most likely the same account entered another way.
+    SameKeyOtherName,
+}
+
+/// A vault account the candidate resembles; `matches` is its display name, never a secret.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct DuplicateView {
+    pub kind: DuplicateKind,
+    pub matches: String,
+}
+
 /// The seed of one entry, returned only after the user re-enters the master password.
 #[derive(Serialize, TS)]
 #[ts(export)]

@@ -24,6 +24,8 @@ export function fakeApi(overrides: Partial<VaultApi> = {}): VaultApi {
     draftFromLink: vi.fn().mockResolvedValue([]),
     draftFromImage: vi.fn().mockResolvedValue([]),
     addDraft: vi.fn().mockResolvedValue("new-id"),
+    checkDuplicate: vi.fn().mockResolvedValue(null),
+    checkDraftDuplicate: vi.fn().mockResolvedValue(null),
     discardDrafts: resolved(),
     listImportFormats: vi
       .fn()

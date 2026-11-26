@@ -8,8 +8,9 @@ use tauri::State;
 use zeroize::Zeroizing;
 
 use super::dto::{
-    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, ImportChoice, ImportFormatView,
-    ImportPreview, ImportResult, NewEntryRequest, OtpTypeView, RevealedSecret, VaultStatus,
+    DraftEditsRequest, DraftView, DuplicateView, EntryChangesRequest, EntryView, ImportChoice,
+    ImportFormatView, ImportPreview, ImportResult, NewEntryRequest, OtpTypeView, RevealedSecret,
+    VaultStatus,
 };
 use super::error::{IpcError, IpcErrorCode};
 use super::service::{VaultService, decode_base64_file};
@@ -164,6 +165,23 @@ pub async fn add_draft(
     edits: DraftEditsRequest,
 ) -> Result<String, IpcError> {
     state.service().add_draft(id, edits)
+}
+
+#[tauri::command]
+pub async fn check_duplicate(
+    state: State<'_, AppState>,
+    request: NewEntryRequest,
+) -> Result<Option<DuplicateView>, IpcError> {
+    state.service().check_duplicate(request)
+}
+
+#[tauri::command]
+pub async fn check_draft_duplicate(
+    state: State<'_, AppState>,
+    id: u32,
+    edits: DraftEditsRequest,
+) -> Result<Option<DuplicateView>, IpcError> {
+    state.service().check_draft_duplicate(id, edits)
 }
 
 #[tauri::command]

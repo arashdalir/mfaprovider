@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { DraftEditsRequest } from "./generated/DraftEditsRequest";
 import type { DraftView } from "./generated/DraftView";
+import type { DuplicateView } from "./generated/DuplicateView";
 import type { EntryChangesRequest } from "./generated/EntryChangesRequest";
 import type { EntryView } from "./generated/EntryView";
 import type { ImportChoice } from "./generated/ImportChoice";
@@ -34,7 +35,7 @@ export type {
   ImportStatus,
 };
 export type { EntryChangesRequest, EntryView, IpcError, IpcErrorCode, NewEntryRequest };
-export type { RevealedSecret, VaultStatus };
+export type { DuplicateView, RevealedSecret, VaultStatus };
 export type { OtpTypeView };
 export type { ParamKindView } from "./generated/ParamKindView";
 export type { ParamSpecView } from "./generated/ParamSpecView";
@@ -92,6 +93,11 @@ export const ipc = {
   /** `image` is the file's bytes as base64. */
   draftFromImage: (image: string) => call<DraftView[]>("draft_from_image", { image }),
   addDraft: (id: number, edits: DraftEditsRequest) => call<string>("add_draft", { id, edits }),
+  /** Whether the account about to be added is already in the vault (null = no). */
+  checkDuplicate: (request: NewEntryRequest) =>
+    call<DuplicateView | null>("check_duplicate", { request }),
+  checkDraftDuplicate: (id: number, edits: DraftEditsRequest) =>
+    call<DuplicateView | null>("check_draft_duplicate", { id, edits }),
   discardDrafts: () => call<void>("discard_drafts"),
   listImportFormats: () => call<ImportFormatView[]>("list_import_formats"),
   /**

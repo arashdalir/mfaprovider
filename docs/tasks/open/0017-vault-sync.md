@@ -1,33 +1,37 @@
-# TASK-0017: Synchronise the vault between devices through a cloud folder
+# TASK-0017: Synchronise the vault between devices
 
-- Status: open (design only; nothing built)
+- Status: open (not started; design is ADR-0008)
 - Created: 2026-11-26
 - Updated: 2026-11-26
-- Related ADRs: ADR-0011 (vault file format), ADR-0010 (self-hosted server, proposed); new ADR to be written
+- Related ADRs: ADR-0008 (accepted: sync via a user-selected cloud file, phased), ADR-0011 (vault file format), ADR-0003, ADR-0010 (proposed)
 
 ## Goal
-(User request, 2026-11-26.) Devices keep the same vault in sync through a Google Drive or OneDrive link that points to a password-protected folder. The user can change the link (move to another platform), change the folder password, and so on.
+(User request, 2026-11-26.) An account added on one device shows up on the others. The user also asked for a link-based setup (Google Drive or OneDrive link to a password-protected folder) where the link and password can be changed later.
 
-## Open questions (an ADR must answer them before code)
-1. **A link alone cannot be read or written by an app.** A Drive/OneDrive share link is a web page; reading and writing needs the provider's API with a sign-in (OAuth) and an app registration (client id, scopes such as Drive `drive.file`/`appdata` or Graph `Files.ReadWrite.AppFolder`). Google Drive has no password-protected links at all; OneDrive has them only in some plans and the password is checked by the web page, not by an API. So "link + password" needs a different mechanism, e.g.:
-   - a. OAuth sign-in per provider (app registered by the project; tokens kept inside the vault),
-   - b. WebDAV or similar with URL + user + password (Nextcloud, many NAS; provider-neutral, matches "change link / change password" best),
-   - c. a plain folder that a sync client (Drive/OneDrive desktop app, Syncthing) keeps in sync; the app only reads/writes a file path (works on desktop; on Android needs the folder picker).
-2. **What is synced.** The already encrypted vault file only (ADR-0011): the provider sees ciphertext; the folder password is then a second, transport-level secret, not the vault's protection. Keys and the master password never leave the device.
-3. **Conflicts.** Two devices change the vault offline: whole-file last-writer-wins loses entries; entry-level merge needs per-entry ids, timestamps and deletion markers, probably a format change (new ADR superseding parts of ADR-0011).
-4. **Credentials.** Where sync credentials live (inside the encrypted vault), how they are changed or removed, and what a lost device means (revoking the token or password).
-5. **Scope.** Desktop and Android only; background sync vs. on unlock/on change; offline behaviour; what the UI shows when the remote is unreachable or was changed by someone else.
+## What ADR-0008 already decides
+- Sync unit: the encrypted vault file; same master password on every device; biometric wraps stay device-local.
+- Merge per entry by `id`, last-writer-wins on `updated_at`, tombstones for deletes; merge on decrypted data inside the core, then re-encrypt.
+- Phases behind a `StorageProvider` trait in `mfa-sync`: (1) a file or folder the user picks (Google Drive/OneDrive/Syncthing clients do the transport; on Android the Storage Access Framework exposes cloud providers), (2) WebDAV, (3) direct Google Drive/OneDrive APIs (OAuth).
+- Conflicted copies made by cloud clients are detected and merged; atomic writes with a header version/etag; opt-in.
+
+## Where the user's idea does not fit as worded
+A share *link* to a password-protected folder is a web page, not something an app can read or write: Google Drive has no password-protected links, and OneDrive's are checked by the web page, not an API. The password-protected-folder idea maps to phase 2 (WebDAV: URL + user + password, changeable in settings) or phase 3 (OAuth sign-in per provider). Phase 1 (pick a synced folder) needs neither.
+
+## Open questions for the user
+1. Start with phase 1 (pick a folder kept in sync by the Drive/OneDrive app; works on desktop and, through Android's file picker, on the phone)? It is the smallest way to get "add on one device, see it on the others".
+2. Are WebDAV (phase 2) and direct provider APIs (phase 3) wanted later, and in which order?
 
 ## Acceptance criteria
-- [ ] ADR proposed with options a–c compared and a recommendation; user decision recorded
-- [ ] (after the decision) criteria for implementation, tests with a fake remote, no secrets in logs
+- [ ] Decision on the phase to build first (user)
+- [ ] Task broken down for that phase (merge in core with tombstones first; the vault model already has tombstones, see TASK-0007/ADR-0004)
+- [ ] Implementation with tests using a fake provider; no secrets in logs
 
 ## Decisions & notes (append-only, dated)
-- 2026-11-26: Task created from the user's idea; no design decision taken.
-- 2026-11-26: **Purpose stated by the user:** an account added on one device must show up on the others. That is the requirement every option is judged against (merge of additions first; edits and deletions need the conflict rules from question 3).
+- 2026-11-26: Task created from the user's idea. First version of this file wrongly treated the design as open and promised a new ADR; ADR-0008 (accepted 2026-11-12) already covers it, so this file now points there. No new ADR needed unless the user wants to change ADR-0008.
+- 2026-11-26: **Purpose stated by the user:** an account added on one device must show up on the others.
 
 ## Progress log (append-only, dated)
-- 2026-11-26: Task created.
+- 2026-11-26: Task created and corrected.
 
 ## Next step
-Write the ADR (options a–c, recommendation) and ask the user to choose; do not start code before.
+Ask the user which phase to build first (question 1 above); then break the task down.

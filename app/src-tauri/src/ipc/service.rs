@@ -18,10 +18,10 @@ use mfa_formats::otpauth::parse_otpauth;
 use mfa_formats::qr::{MAX_FILE_BYTES, decode_qr_image};
 
 use super::dto::{
-    DraftEditsRequest, DraftView, EntryChangesRequest, EntryView, ImportChoice, ImportDecision,
-    ImportFormatView, ImportItemView, ImportPreview, ImportResult, ImportStatus, NewEntryRequest,
-    OtpTypeView, RevealedSecret, SkippedItemView, VaultStatus, apply_edits, draft_views,
-    entry_views, otp_type_views, parse_entry_id,
+    DraftEditsRequest, DraftView, DuplicateKind, DuplicateView, EntryChangesRequest, EntryView,
+    ImportChoice, ImportDecision, ImportFormatView, ImportItemView, ImportPreview, ImportResult,
+    ImportStatus, NewEntryRequest, OtpTypeView, RevealedSecret, SkippedItemView, VaultStatus,
+    apply_edits, draft_views, entry_views, otp_type_views, parse_entry_id,
 };
 use super::error::{IpcError, IpcErrorCode};
 
@@ -166,6 +166,54 @@ impl<S: Storage, C: Clock, R: Rng> VaultService<S, C, R> {
         let id = self.session.add_entry(new, &self.registry)?.to_string();
         self.drafts.clear();
         Ok(id)
+    }
+
+    /// Whether the account about to be added is already in the vault.
+    pub fn check_duplicate(
+        &mut self,
+        request: NewEntryRequest,
+    ) -> Result<Option<DuplicateView>, IpcError> {
+        let candidate = NewEntry::try_from(request)?;
+        self.duplicate_of(&candidate)
+    }
+
+    /// The same for a draft with the edits applied.
+    pub fn check_draft_duplicate(
+        &mut self,
+        draft_id: u32,
+        edits: DraftEditsRequest,
+    ) -> Result<Option<DuplicateView>, IpcError> {
+        self.require_unlocked()?;
+        let candidate = {
+            let draft = usize::try_from(draft_id)
+                .ok()
+                .and_then(|index| self.drafts.get(index))
+                .ok_or(IpcError::new(IpcErrorCode::NotFound))?;
+            apply_edits(draft, edits)
+        };
+        self.duplicate_of(&candidate)
+    }
+
+    fn duplicate_of(&mut self, candidate: &NewEntry) -> Result<Option<DuplicateView>, IpcError> {
+        let data = self.session.data()?;
+        let Some(status) = plan_merge(data, std::slice::from_ref(candidate))
+            .into_iter()
+            .next()
+        else {
+            return Ok(None);
+        };
+        let view = |kind, id| {
+            data.entry(id).map(|entry| DuplicateView {
+                kind,
+                matches: format!("{} · {}", entry.issuer, entry.account),
+            })
+        };
+        Ok(match status {
+            MergeStatus::DuplicateOfVault(id) => view(DuplicateKind::SameAccount, id),
+            MergeStatus::ConflictWithVault(id) => view(DuplicateKind::SameNameOtherKey, id),
+            MergeStatus::SameSecretUnderOtherName(id) => view(DuplicateKind::SameKeyOtherName, id),
+            MergeStatus::New | MergeStatus::DuplicateOfEarlierItem(_) => None,
+        })
     }
 
     pub fn discard_drafts(&mut self) {
@@ -1778,5 +1826,122 @@ mod tests {
         assert_eq!(preview.items.len(), 2);
         service.import_apply(accept_defaults(&preview)).unwrap();
         assert_eq!(accounts(&mut service), ["one", "two"]);
+    }
+
+    mod duplicate_check {
+        use super::*;
+        use crate::ipc::dto::DuplicateKind;
+
+        fn found(
+            service: &mut TestService,
+            request: NewEntryRequest,
+        ) -> Option<(DuplicateKind, String)> {
+            service
+                .check_duplicate(request)
+                .unwrap()
+                .map(|view| (view.kind, view.matches))
+        }
+
+        #[test]
+        fn nothing_is_reported_for_an_account_that_is_not_in_the_vault() {
+            let (mut service, _, _) = unlocked();
+            assert_eq!(found(&mut service, totp_request("alice")), None);
+            service.add_entry(totp_request("alice")).unwrap();
+            let mut other = totp_request("bob");
+            other.secret_base32 = "JBSWY3DPEHPK3PXP".into();
+            assert_eq!(found(&mut service, other), None);
+        }
+
+        #[test]
+        fn the_same_name_and_key_is_the_same_account_whatever_the_case() {
+            let (mut service, _, _) = unlocked();
+            service.add_entry(totp_request("alice")).unwrap();
+            assert_eq!(
+                found(&mut service, totp_request("ALICE")),
+                Some((DuplicateKind::SameAccount, "Example · alice".into()))
+            );
+        }
+
+        #[test]
+        fn the_same_name_with_another_key_is_reported_as_such() {
+            let (mut service, _, _) = unlocked();
+            service.add_entry(totp_request("alice")).unwrap();
+            let mut request = totp_request("alice");
+            request.secret_base32 = "JBSWY3DPEHPK3PXP".into();
+            assert_eq!(
+                found(&mut service, request),
+                Some((DuplicateKind::SameNameOtherKey, "Example · alice".into()))
+            );
+        }
+
+        #[test]
+        fn the_same_key_under_another_name_is_reported_with_the_existing_name() {
+            let (mut service, _, _) = unlocked();
+            service.add_entry(totp_request("alice")).unwrap();
+            assert_eq!(
+                found(&mut service, totp_request("bob")),
+                Some((DuplicateKind::SameKeyOtherName, "Example · alice".into()))
+            );
+        }
+
+        #[test]
+        fn checking_changes_nothing_and_needs_the_vault_unlocked() {
+            let (mut service, storage, _) = unlocked();
+            service.add_entry(totp_request("alice")).unwrap();
+            let before = storage.bytes();
+            let _ = found(&mut service, totp_request("alice"));
+            assert_eq!(storage.bytes(), before);
+            assert_eq!(accounts(&mut service), ["alice"]);
+            service.lock();
+            assert_eq!(
+                service
+                    .check_duplicate(totp_request("alice"))
+                    .unwrap_err()
+                    .code,
+                IpcErrorCode::Locked
+            );
+        }
+
+        #[test]
+        fn the_answer_never_contains_the_key() {
+            let (mut service, _, _) = unlocked();
+            service.add_entry(totp_request("alice")).unwrap();
+            let view = service.check_duplicate(totp_request("alice")).unwrap();
+            let text = serde_json::to_string(&view).unwrap();
+            assert!(!text.contains("GEZDGNBVGY3TQOJQ"), "{text}");
+        }
+
+        #[test]
+        fn a_draft_is_checked_with_the_edits_applied() {
+            let (mut service, _, _) = unlocked();
+            service.draft_from_link(&link("alice")).unwrap();
+            service.add_draft(0, edits("alice")).unwrap();
+            service.draft_from_link(&link("alice")).unwrap();
+            let same = service
+                .check_draft_duplicate(0, edits("alice"))
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                (same.kind, same.matches.as_str()),
+                (DuplicateKind::SameAccount, "Example · alice")
+            );
+            let renamed = service
+                .check_draft_duplicate(0, edits("carol"))
+                .unwrap()
+                .unwrap();
+            assert_eq!(renamed.kind, DuplicateKind::SameKeyOtherName);
+        }
+
+        #[test]
+        fn an_unknown_draft_cannot_be_checked() {
+            let (mut service, _, _) = unlocked();
+            assert_eq!(
+                service
+                    .check_draft_duplicate(3, edits("x"))
+                    .unwrap_err()
+                    .code,
+                IpcErrorCode::NotFound
+            );
+        }
     }
 }

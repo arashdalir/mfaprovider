@@ -21,6 +21,8 @@ const COMMANDS: &[&str] = &[
     "draft_from_link",
     "draft_from_image",
     "add_draft",
+    "check_duplicate",
+    "check_draft_duplicate",
     "discard_drafts",
     "list_import_formats",
     "import_preview",

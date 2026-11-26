@@ -48,6 +48,8 @@ pub fn run() {
             commands::draft_from_link,
             commands::draft_from_image,
             commands::add_draft,
+            commands::check_duplicate,
+            commands::check_draft_duplicate,
             commands::discard_drafts,
             commands::list_import_formats,
             commands::import_preview,

@@ -22,6 +22,8 @@
     "allow-draft-from-link",
     "allow-draft-from-image",
     "allow-add-draft",
+    "allow-check-duplicate",
+    "allow-check-draft-duplicate",
     "allow-discard-drafts",
     "allow-list-import-formats",
     "allow-import-preview",

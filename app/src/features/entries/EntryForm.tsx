@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApi } from "@/ipc/api-context";
-import type { DraftView, EntryView, OtpTypeView, ParamSpecView } from "@/ipc/client";
+import type {
+  DraftView,
+  DuplicateView,
+  EntryView,
+  OtpTypeView,
+  ParamSpecView,
+} from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
 
 import { RevealSecret } from "./RevealSecret";
@@ -78,12 +84,28 @@ function FormBody({
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [duplicate, setDuplicate] = useState<DuplicateView | null>(null);
+
+  useEffect(() => {
+    if (!draft) {
+      return;
+    }
+    let cancelled = false;
+    api
+      .checkDraftDuplicate(draft.draft_id, toDraftEdits(valuesOfDraft(draft, types)))
+      .then((found) => !cancelled && setDuplicate(found))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [api, draft, types]);
 
   const type = types.find((candidate) => candidate.id === values.otpType);
   const supported = type !== undefined;
 
   function change(patch: Partial<FormValues>) {
     setValues((current) => ({ ...current, ...patch }));
+    setDuplicate(null);
   }
 
   async function perform(action: () => Promise<unknown>) {
@@ -97,6 +119,27 @@ function FormBody({
     }
   }
 
+  async function addUnlessDuplicate(): Promise<void> {
+    setBusy(true);
+    try {
+      const found = draft
+        ? await api.checkDraftDuplicate(draft.draft_id, toDraftEdits(values))
+        : await api.checkDuplicate(toNewEntryRequest(values));
+      if (found) {
+        setDuplicate(found);
+        setBusy(false);
+        return;
+      }
+    } catch (error) {
+      setProblem(describeError(error));
+      setBusy(false);
+      return;
+    }
+    await perform(() =>
+      draft ? api.addDraft(draft.draft_id, toDraftEdits(values)) : api.addEntry(toNewEntryRequest(values)),
+    );
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault();
     const found = formProblem(values, type, adding && !draft);
@@ -106,10 +149,12 @@ function FormBody({
     }
     if (entry) {
       void perform(() => api.editEntry(entry.id, toChangesRequest(baseline, values, supported)));
-    } else if (draft) {
-      void perform(() => api.addDraft(draft.draft_id, toDraftEdits(values)));
+    } else if (duplicate === null) {
+      void addUnlessDuplicate();
     } else {
-      void perform(() => api.addEntry(toNewEntryRequest(values)));
+      void perform(() =>
+        draft ? api.addDraft(draft.draft_id, toDraftEdits(values)) : api.addEntry(toNewEntryRequest(values)),
+      );
     }
   }
 
@@ -199,6 +244,8 @@ function FormBody({
         />
       </div>
 
+      {adding && duplicate && <DuplicateNotice duplicate={duplicate} />}
+
       {problem && (
         <p role="alert" className="text-sm text-destructive">
           {problem}
@@ -207,7 +254,7 @@ function FormBody({
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={busy}>
-          {adding ? "Add" : "Save"}
+          {adding ? (duplicate ? "Add anyway" : "Add") : "Save"}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
           Cancel
@@ -302,5 +349,24 @@ function ParamField({
         />
       )}
     </div>
+  );
+}
+
+const DUPLICATE_TEXT: Record<DuplicateView["kind"], (name: string) => string> = {
+  same_account: (name) => `This account is already in your vault: ${name}.`,
+  same_name_other_key: (name) =>
+    `An account named ${name} is already in your vault, with a different secret key.`,
+  same_key_other_name: (name) =>
+    `This secret key is already in your vault under another name: ${name}. It is probably the same account.`,
+};
+
+function DuplicateNotice({ duplicate }: { duplicate: DuplicateView }) {
+  return (
+    <p
+      role="status"
+      className="rounded-md border border-amber-500 bg-amber-500/10 p-3 text-sm"
+    >
+      {DUPLICATE_TEXT[duplicate.kind](duplicate.matches)} Press “Add anyway” to add it as well.
+    </p>
   );
 }

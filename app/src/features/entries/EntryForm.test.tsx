@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiContext, type VaultApi } from "@/ipc/api-context";
-import { IpcCallError, type EntryView, type OtpTypeView } from "@/ipc/client";
+import {
+  IpcCallError,
+  type DraftView,
+  type DuplicateView,
+  type EntryView,
+  type OtpTypeView,
+} from "@/ipc/client";
 import { fakeApi } from "@/test/fake-api";
 
 import { EntryForm } from "./EntryForm";
@@ -38,7 +44,7 @@ const entry: EntryView = {
   code: { state: "unsupported" },
 };
 
-function open(props: { entry?: EntryView }, overrides: Partial<VaultApi> = {}) {
+function open(props: { entry?: EntryView; draft?: DraftView }, overrides: Partial<VaultApi> = {}) {
   const api = fakeApi({ listOtpTypes: vi.fn().mockResolvedValue(types), ...overrides });
   const onDone = vi.fn();
   const onCancel = vi.fn();
@@ -201,5 +207,100 @@ describe("editing an account", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not be read or written/);
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("warning about an account that is already there", () => {
+  const sameAccount: DuplicateView = { kind: "same_account", matches: "GitHub · alice" };
+
+  async function fillManualForm() {
+    await userEvent.type(await screen.findByLabelText("Issuer"), "GitHub");
+    await userEvent.type(screen.getByLabelText("Account"), "alice");
+    await userEvent.type(screen.getByLabelText("Secret key"), "JBSWY3DPEHPK3PXP");
+  }
+
+  it("adds straight away when nothing matches", async () => {
+    const { api, onDone } = open({});
+    await fillManualForm();
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(api.checkDuplicate).toHaveBeenCalledOnce();
+    expect(api.addEntry).toHaveBeenCalledOnce();
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it("warns instead of adding, and adds only after a second, deliberate press", async () => {
+    const { api, onDone } = open({}, { checkDuplicate: vi.fn().mockResolvedValue(sameAccount) });
+    await fillManualForm();
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("status")).toHaveTextContent("This account is already in your vault: GitHub · alice.");
+    expect(api.addEntry).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Add anyway" }));
+    expect(api.addEntry).toHaveBeenCalledOnce();
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it("says what kind of match it is", async () => {
+    open(
+      {},
+      {
+        checkDuplicate: vi
+          .fn()
+          .mockResolvedValue({ kind: "same_key_other_name", matches: "GitHub · work" }),
+      },
+    );
+    await fillManualForm();
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This secret key is already in your vault under another name: GitHub · work.",
+    );
+  });
+
+  it("drops the warning when a field is edited, and checks again on the next add", async () => {
+    const checkDuplicate = vi.fn().mockResolvedValueOnce(sameAccount).mockResolvedValue(null);
+    const { api } = open({}, { checkDuplicate });
+    await fillManualForm();
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await userEvent.type(screen.getByLabelText("Account"), "2");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(checkDuplicate).toHaveBeenCalledTimes(2);
+    expect(api.addEntry).toHaveBeenCalledOnce();
+  });
+
+  it("does not add when the check itself fails", async () => {
+    const { api } = open(
+      {},
+      { checkDuplicate: vi.fn().mockRejectedValue(new IpcCallError({ code: "locked", message: null })) },
+    );
+    await fillManualForm();
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(api.addEntry).not.toHaveBeenCalled();
+  });
+
+  it("warns as soon as a scanned or pasted account opens, and adds it after Add anyway", async () => {
+    const draft: DraftView = {
+      draft_id: 0,
+      otp_type: "totp",
+      issuer: "GitHub",
+      account: "alice",
+      params: {},
+    };
+    const { api, onDone } = open(
+      { draft },
+      { checkDraftDuplicate: vi.fn().mockResolvedValue(sameAccount) },
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("already in your vault");
+    await userEvent.click(screen.getByRole("button", { name: "Add anyway" }));
+    expect(api.addDraft).toHaveBeenCalledWith(0, expect.objectContaining({ account: "alice" }));
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it("shows no warning when editing an existing account", async () => {
+    open({ entry }, { checkDuplicate: vi.fn().mockResolvedValue(sameAccount) });
+    await screen.findByLabelText("Issuer");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
