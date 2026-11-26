@@ -23,7 +23,7 @@
 
 - 2026-11-26: Done in code. `CameraStep.tsx`: `getUserMedia` (rear camera preferred, no audio), a frame every 400 ms scaled to at most 960 px, JPEG, base64 to the existing `draft_from_image`; stops at the first account found, on unmount and on lock; frames are never stored. "No QR code in the image" is ignored silently; other core messages (e.g. "not an authenticator link") are shown as a hint while it keeps looking; permission, no-camera, in-use and no-API cases have their own sentences. `useHasCamera()` (enumerateDevices, kind `videoinput`) decides whether Add account offers "Scan a QR code with the camera"; Back (TASK-0019) leaves the step. Android manifest: `CAMERA` permission, camera feature not required (in `gen/android`, uncommitted until ADR-0015 is accepted). UI tests: 172 (11 new). **Not verified:** on the phone (permission prompt through the generated WebChromeClient, picture, speed of the frame loop over IPC, reading the code), on desktop webcams, Google migration codes by camera.
 
-- 2026-11-26: Closed on the user's instruction. The camera button and live scanning were not confirmed by us on the phone; closed on the user's instruction.
+- 2026-11-26: Closed on the user's instruction. The user then tried camera scanning on the phone and reported it works.
 
 ## Next step
 None.
