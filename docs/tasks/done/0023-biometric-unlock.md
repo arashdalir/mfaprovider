@@ -1,6 +1,6 @@
 # TASK-0023: Biometric unlock on Android
 
-- Status: in-progress
+- Status: done
 - Created: 2026-11-26
 - Updated: 2026-11-26
 - Related ADRs: ADR-0003 (accepted), ADR-0016 (proposed), ADR-0011; part of TASK-0012
@@ -12,9 +12,9 @@
 - [x] Core: `export_key(password)` and `unlock_with_key(key)` with tests (right key, wrong key, locked, after password change, no change to the vault bytes)
 - [x] Shell: `BiometricProvider` trait, `Unavailable` implementation, commands (`biometric_status`, `biometric_enable`, `biometric_disable`, `unlock_with_biometric`), device-local state with the password re-prompt period; fake provider in tests (enable needs the password; cancelled/failed prompt falls back; expired period refuses; lock keeps the setting)
 - [x] UI: Settings switch "Unlock with fingerprint/face" (asks the password), unlock screen button, clear messages for cancelled/failed/invalidated/expired
-- [ ] Android plugin (Kotlin): Keystore AES-GCM key bound to strong biometrics, invalidated on enrolment change, wrapped VK in app-private storage; `allowBackup=false`, `FLAG_SECURE`
-- [ ] Tested on the user's phone; results recorded here
-- [ ] CI green
+- [x] Android plugin (Kotlin): Keystore AES-GCM key bound to strong biometrics, invalidated on enrolment change, wrapped VK in app-private storage; `allowBackup=false`, `FLAG_SECURE`
+- [x] Tested on the user's phone; results recorded here (partial, see log)
+- [x] CI green (076b3d3)
 
 ## Decisions & notes (append-only, dated)
 - 2026-11-26: Official `tauri-plugin-biometric` is a prompt only (no key binding), which ADR-0003 rules out; so a small own plugin (ADR-0016, proposed).
@@ -30,5 +30,7 @@
 
 - 2026-11-26: UI done: Settings switch (asks the master password, then offers the re-prompt period), unlock-screen button (hidden when off or when the password is due, which shows a hint instead), a message per new error code; 8 UI tests, 187 in total. Android plugin written: `keystore.rs` (`AndroidBiometrics`, android-only, maps the plugin's reject codes to `BiometricError`; 3 platform-independent tests) and `gen/android/.../KeystorePlugin.kt` (AES-GCM Keystore key, user auth required per use, strong biometrics only, invalidated on enrolment; prompt with a CryptoObject; wrap = IV + ciphertext in `filesDir/biometric.wrap`; invalidation deletes key and wrap). Also `allowBackup=false`, `FLAG_SECURE`, dependency `androidx.biometric:biometric:1.1.0`. The APK builds (Rust and Kotlin compile); `AppState::new` now takes the provider (Android plugin, or `NoBiometrics` on desktop). Note: the plugin bridge carries the key as base64 in a JSON string, so a short-lived copy exists outside zeroising buffers on both sides; accepted for now (memory only), revisit in the security review (TASK-0013). The Kotlin source lives in `gen/android`, which is still uncommitted until ADR-0015 is accepted.
 
+- 2026-11-26: Phone test (Pixel 10a, debug build): the user reported that the fingerprint switch in Settings works, and asked to close the task. Not reported, so **not verified by us**: the unlock-screen button after locking, cancelling the prompt, a wrong finger, the invalidation after adding a fingerprint, and the password re-prompt after the period. CI green on 076b3d3 (c3c6e05 failed typecheck for missing error messages; fixed by the UI commit).
+
 ## Next step
-Phone test (user): Settings → turn on fingerprint unlock (password, then the prompt) → lock → unlock with the fingerprint; also cancel, a wrong finger, and adding a fingerprint in system settings (must switch it off). Record the results here, then CI and move to done/. Commit gen/android once ADR-0015 is accepted.
+None. If the unverified phone cases misbehave, reopen as a new task.
