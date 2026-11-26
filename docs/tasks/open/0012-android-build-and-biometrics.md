@@ -9,7 +9,7 @@
 Make the app build and run on Android: toolchain and CI job, `BiometricProvider` with an Android Keystore implementation (key bound to strong biometrics, invalidated on enrollment change, device-local wrapped vault key), `FLAG_SECURE`, `allowBackup=false`, and camera QR scanning feeding the same entry-input path as TASK-0009.
 
 ## Acceptance criteria
-- [ ] Android SDK/NDK setup documented; `tauri android build` works locally and in CI
+- [x] Android SDK/NDK setup documented; `tauri android build` works locally and in CI
 - [x] `BiometricProvider` interface in core; Android Keystore implementation as a small Kotlin Tauri plugin
 - [ ] Biometric unlock works, falls back to master password, periodic password re-prompt (default 7 days, configurable)
 - [ ] `FLAG_SECURE`, `allowBackup=false` (done, in gen/android), lock when the app goes to the background (done 2026-11-26, see log), no secrets in logs/crash reports (not yet reviewed)
@@ -40,5 +40,7 @@ Make the app build and run on Android: toolchain and CI job, `BiometricProvider`
 
 - 2026-11-27: Added the CI job `Android debug APK` (builds arm64, checks the APK's application id) and `docs/android.md`; README status line updated.
 
+- 2026-11-27: CI green on 9ad9c48, including the new Android job.
+
 ## Next step
-Confirm the Android CI job is green. Still to check on the phone: read a QR image through the picker (no lock); go to the home screen and back, also after using a picker (locks). Secrets-in-logs review and a signed release build go with TASK-0013.
+Still to check on the phone: read a QR image through the picker (no lock); go to the home screen and back, also after using a picker (locks). Secrets-in-logs review and a signed release build go with TASK-0013.

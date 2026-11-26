@@ -19,3 +19,4 @@
 | [0015](0015-android-application-id-differs-from-code-namespace.md) | Android application id keeps the underscore; code namespace does not (`applicationId` vs `namespace`) | accepted |
 | [0016](0016-android-biometric-unlock-plugin.md) | Android biometric unlock: own Kotlin plugin, Keystore key bound to the biometric, core unlocks with a key | accepted |
 | [0017](0017-file-picker-does-not-lock.md) | The trip to a phone's file picker does not lock the vault (one departure, 2 minutes) | accepted |
+| [0018](0018-sync-merge-rules-and-shared-vault-key.md) | Sync: merge tie rules; synced devices share one vault key; a new password slot is adopted only with its password | proposed |
