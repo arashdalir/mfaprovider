@@ -2,7 +2,7 @@
 
 Open-source, free-to-use authenticator (TOTP / HOTP / Steam Guard) for Windows, Linux and Android, with a Rust core and a Tauri 2 + React UI. Licensed AGPL-3.0-or-later.
 
-Status: skeleton only — no product features yet. Architecture and decisions: [docs/adr/](docs/adr/README.md). Current work: [docs/tasks/open/](docs/tasks/open/).
+Status: in development, not yet released or security-reviewed. Architecture and decisions: [docs/adr/](docs/adr/README.md). Current work: [docs/tasks/open/](docs/tasks/open/).
 
 ## Layout
 | Path | Purpose |
@@ -35,6 +35,8 @@ pnpm test
 pnpm tauri dev                          # run
 pnpm tauri build --no-bundle --debug    # build without installers
 ```
+
+Android: see [docs/android.md](docs/android.md).
 
 Dependency policy: `cargo deny --manifest-path core/Cargo.toml check` and `cargo deny --manifest-path app/src-tauri/Cargo.toml check` (config: `deny.toml`); `pnpm audit` for the UI.
 

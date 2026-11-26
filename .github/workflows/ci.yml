@@ -82,6 +82,49 @@ jobs:
           fi
         shell: bash
 
+  android:
+    name: Android debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+          key: android
+      - name: Install the NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+        env:
+          NDK_VERSION: 29.0.14206865
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri android build --debug --target aarch64 --apk
+        env:
+          CARGO_PROFILE_DEV_DEBUG: 0
+          CARGO_PROFILE_DEV_STRIP: symbols
+      - name: The APK carries the real application id (ADR-0015)
+        run: |
+          aapt=$(ls "$ANDROID_HOME"/build-tools/*/aapt | sort -V | tail -1)
+          "$aapt" dump badging src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk             | grep "^package: name='dev.area_51.android.mfaprovider.debug'"
+
   supply-chain:
     name: Dependency audit
     runs-on: ubuntu-latest

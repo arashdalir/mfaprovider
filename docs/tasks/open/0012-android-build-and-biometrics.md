@@ -38,5 +38,7 @@ Make the app build and run on Android: toolchain and CI job, `BiometricProvider`
 
 - 2026-11-27: The user accepted ADR-0015, ADR-0016 and ADR-0017. `gen/android` committed (checked for local paths and secrets; Tauri's ignore files keep the machine-specific ones out).
 
+- 2026-11-27: Added the CI job `Android debug APK` (builds arm64, checks the APK's application id) and `docs/android.md`; README status line updated.
+
 ## Next step
-Still to check on the phone: read a QR image through the picker (no lock); go to the home screen and back, also after using a picker (locks). Also: (1) the user accepts or rejects ADR-0015, then commit `gen/android` (holds the Kotlin plugin; until then it exists only on this machine); also ADR-0016 and ADR-0017; (2) an Android CI job and written SDK/NDK setup steps; (3) review logs/crash output for secrets (with TASK-0013); (4) a signed release build (with TASK-0013).
+Confirm the Android CI job is green. Still to check on the phone: read a QR image through the picker (no lock); go to the home screen and back, also after using a picker (locks). Secrets-in-logs review and a signed release build go with TASK-0013.
