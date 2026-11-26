@@ -140,6 +140,33 @@ describe("SessionGate", () => {
     expect(await screen.findByRole("heading", { name: "Unlock" })).toBeInTheDocument();
   });
 
+  function hideDocument(state: DocumentVisibilityState) {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: state });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  it("tells the core when the app leaves the screen, and shows the unlock screen", async () => {
+    const status = vi
+      .fn()
+      .mockResolvedValueOnce({ exists: true, unlocked: true })
+      .mockResolvedValue({ exists: true, unlocked: false });
+    const api = fakeApi({ vaultStatus: status });
+    render(withApi(api, <SessionGate>{open}</SessionGate>));
+    await screen.findByText("the vault is open");
+    act(() => hideDocument("hidden"));
+    expect(api.reportBackgrounded).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("heading", { name: "Unlock" })).toBeInTheDocument();
+    hideDocument("visible");
+  });
+
+  it("ignores the app coming back to the screen", async () => {
+    const api = fakeApi({ vaultStatus: vi.fn().mockResolvedValue({ exists: true, unlocked: true }) });
+    render(withApi(api, <SessionGate>{open}</SessionGate>));
+    await screen.findByText("the vault is open");
+    act(() => hideDocument("visible"));
+    expect(api.reportBackgrounded).not.toHaveBeenCalled();
+  });
+
   it("shows the content once unlocked and locks on request", async () => {
     const status = vi
       .fn()

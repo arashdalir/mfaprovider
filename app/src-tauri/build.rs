@@ -14,6 +14,7 @@ const COMMANDS: &[&str] = &[
     "set_biometric_reprompt_days",
     "lock",
     "record_activity",
+    "report_backgrounded",
     "set_idle_lock",
     "list_entries",
     "add_entry",

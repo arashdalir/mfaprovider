@@ -15,6 +15,7 @@
     "allow-set-biometric-reprompt-days",
     "allow-lock",
     "allow-record-activity",
+    "allow-report-backgrounded",
     "allow-set-idle-lock",
     "allow-list-entries",
     "allow-add-entry",

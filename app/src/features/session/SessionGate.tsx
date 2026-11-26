@@ -65,6 +65,19 @@ export function SessionGate({ children }: { children: (actions: SessionActions) 
     return () => clearInterval(timer);
   }, [unlocked, refresh]);
 
+  useEffect(() => {
+    if (!unlocked) {
+      return;
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        void api.reportBackgrounded().then(() => refresh(true));
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [unlocked, api, refresh]);
+
   const lock = useCallback(async () => {
     await api.lock();
     await refresh(false);

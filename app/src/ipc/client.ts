@@ -77,6 +77,8 @@ export const ipc = {
   createVault: (password: string) => call<void>("create_vault", { password }),
   unlock: (password: string) => call<void>("unlock", { password }),
   lock: () => call<void>("lock"),
+  /** The app left the screen; the core locks the vault if its policy says so. */
+  reportBackgrounded: () => call<void>("report_backgrounded"),
   recordActivity: () => call<void>("record_activity"),
   setIdleLock: (seconds: number | null) => call<void>("set_idle_lock", { seconds }),
   listEntries: () => call<EntryView[]>("list_entries"),

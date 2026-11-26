@@ -57,6 +57,7 @@ pub fn run() {
             commands::set_biometric_reprompt_days,
             commands::lock,
             commands::record_activity,
+            commands::report_backgrounded,
             commands::set_idle_lock,
             commands::list_entries,
             commands::add_entry,

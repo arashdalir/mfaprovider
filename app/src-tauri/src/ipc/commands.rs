@@ -4,6 +4,7 @@
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use mfa_core::biometric::BiometricProvider;
+use mfa_core::vault::SystemEvent;
 use mfa_storage::FileStorage;
 use tauri::State;
 use zeroize::Zeroizing;
@@ -97,6 +98,12 @@ pub async fn set_biometric_reprompt_days(
 #[tauri::command]
 pub async fn lock(state: State<'_, AppState>) -> Result<(), IpcError> {
     state.service().lock();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn report_backgrounded(state: State<'_, AppState>) -> Result<(), IpcError> {
+    state.service().notify(SystemEvent::Backgrounded);
     Ok(())
 }
 
