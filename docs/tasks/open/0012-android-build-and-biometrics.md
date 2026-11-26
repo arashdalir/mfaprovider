@@ -34,5 +34,7 @@ Make the app build and run on Android: toolchain and CI job, `BiometricProvider`
 
 - 2026-11-27: Phone test of `27283d6` (user): the camera scan does not lock the vault, the file picker does (so a file import could not be finished). The background lock and fingerprint checks were not reported separately. Fix per ADR-0017 (proposed): the two file inputs call `expect_file_picker`, the shell excuses one departure for at most 2 minutes (mobile only), `report_foregrounded` ends it. 7 shell tests (147) and 2 UI tests (191). Not yet verified on the phone.
 
+- 2026-11-27: Phone test of `c4ef1b2` (user): import now works as expected. CI green. Not reported: QR from an image, locking after going to the home screen, and locking again after a picker.
+
 ## Next step
-User checks on the phone: import a file and read a QR image through the picker (no lock); then go to the home screen and back (locks). After that: (1) the user accepts or rejects ADR-0015, then commit `gen/android` (holds the Kotlin plugin; until then it exists only on this machine); also ADR-0016 and ADR-0017; (2) an Android CI job and written SDK/NDK setup steps; (3) review logs/crash output for secrets (with TASK-0013); (4) a signed release build (with TASK-0013).
+Still to check on the phone: read a QR image through the picker (no lock); go to the home screen and back, also after using a picker (locks). Also: (1) the user accepts or rejects ADR-0015, then commit `gen/android` (holds the Kotlin plugin; until then it exists only on this machine); also ADR-0016 and ADR-0017; (2) an Android CI job and written SDK/NDK setup steps; (3) review logs/crash output for secrets (with TASK-0013); (4) a signed release build (with TASK-0013).
