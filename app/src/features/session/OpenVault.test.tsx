@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -80,6 +80,44 @@ describe("OpenVault settings", () => {
     expect(screen.getByRole("region", { name: "Settings" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(await screen.findByText(/GitHub/)).toBeInTheDocument();
+  });
+});
+
+describe("OpenVault back navigation", () => {
+  const systemBack = async () => {
+    window.history.back();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  };
+
+  it("goes back one level at a time inside Add account, with the button or the system back", async () => {
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Add account" }));
+    await userEvent.click(screen.getByRole("button", { name: "Paste an otpauth:// link" }));
+    expect(screen.getByRole("heading", { name: /link/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("region", { name: "Add account" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Paste an otpauth:// link" }));
+    await act(systemBack);
+    expect(await screen.findByRole("region", { name: "Add account" })).toBeInTheDocument();
+
+    await act(systemBack);
+    expect(await screen.findByText(/GitHub/)).toBeInTheDocument();
+  });
+
+  it("leaves Settings with the system back", async () => {
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await act(systemBack);
+    expect(await screen.findByText(/GitHub/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+  });
+
+  it("has no Back button on the account list", async () => {
+    open();
+    await screen.findByText(/GitHub/);
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 });
 

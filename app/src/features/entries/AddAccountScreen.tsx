@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/ipc/api-context";
+import { useBack } from "@/lib/use-back";
 import type { DraftView } from "@/ipc/client";
 
 import { EntryForm } from "./EntryForm";
@@ -29,6 +30,8 @@ export function AddAccountScreen({ onDone, onCancel }: { onDone: () => void; onC
     void api.discardDrafts().catch(() => undefined);
     choose();
   }
+
+  useBack(step.kind === "choose" ? null : step.kind === "review" ? abandonDrafts : choose);
 
   switch (step.kind) {
     case "manual":

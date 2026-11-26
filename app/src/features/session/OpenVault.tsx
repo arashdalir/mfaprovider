@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { BackButton } from "@/components/BackButton";
 import { Button } from "@/components/ui/button";
 import { AddAccountScreen } from "@/features/entries/AddAccountScreen";
 import { EntryForm } from "@/features/entries/EntryForm";
@@ -9,6 +10,7 @@ import { SettingsScreen } from "@/features/settings/SettingsScreen";
 import { idleLockSeconds, loadSettings } from "@/features/settings/settings";
 import type { Theme } from "@/features/theme/theme";
 import { useApi } from "@/ipc/api-context";
+import { useBack } from "@/lib/use-back";
 import type { EntryView } from "@/ipc/client";
 
 import { useActivityReporter } from "./useActivityReporter";
@@ -33,23 +35,35 @@ export function OpenVault({
   useActivityReporter();
   const [view, setView] = useState<View>({ kind: "list" });
   const backToList = () => setView({ kind: "list" });
+  useBack(view.kind === "list" ? null : backToList);
 
   // The core forgets the chosen idle time when the app restarts; tell it again once unlocked.
   useEffect(() => {
     void api.setIdleLock(idleLockSeconds(loadSettings())).catch(() => undefined);
   }, [api]);
 
-  if (view.kind === "import") {
-    return <ImportScreen onClose={backToList} />;
+  function subScreen(current: Exclude<View, { kind: "list" }>) {
+    switch (current.kind) {
+      case "import":
+        return <ImportScreen onClose={backToList} />;
+      case "settings":
+        return <SettingsScreen theme={theme} onThemeChange={onThemeChange} onClose={backToList} />;
+      case "add":
+        return <AddAccountScreen onDone={backToList} onCancel={backToList} />;
+      case "edit":
+        return (
+          <EntryForm key={current.entry.id} entry={current.entry} onDone={backToList} onCancel={backToList} />
+        );
+    }
   }
-  if (view.kind === "settings") {
-    return <SettingsScreen theme={theme} onThemeChange={onThemeChange} onClose={backToList} />;
-  }
-  if (view.kind === "add") {
-    return <AddAccountScreen onDone={backToList} onCancel={backToList} />;
-  }
-  if (view.kind === "edit") {
-    return <EntryForm key={view.entry.id} entry={view.entry} onDone={backToList} onCancel={backToList} />;
+
+  if (view.kind !== "list") {
+    return (
+      <div className="flex flex-col gap-2">
+        <BackButton />
+        {subScreen(view)}
+      </div>
+    );
   }
   return (
     <div className="flex flex-col gap-4">

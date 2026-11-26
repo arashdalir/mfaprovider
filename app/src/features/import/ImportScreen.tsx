@@ -7,6 +7,7 @@ import { fileToBase64 } from "@/features/entries/file-to-base64";
 import { useApi } from "@/ipc/api-context";
 import type { ImportFormatView, ImportPreview, ImportResult } from "@/ipc/client";
 import { describeError, isPasswordRequired } from "@/ipc/error-message";
+import { useBack } from "@/lib/use-back";
 
 import { ImportPreviewStep } from "./ImportPreviewStep";
 
@@ -85,6 +86,13 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
+  function backToPick() {
+    void api.importDiscard().catch(() => undefined);
+    setStep({ kind: "pick" });
+  }
+
+  useBack(step.kind === "preview" ? backToPick : null);
+
   if (step.kind === "preview") {
     return (
       <ImportPreviewStep
@@ -161,9 +169,6 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
           {problem}
         </p>
       )}
-      <Button variant="outline" className="self-start" onClick={onClose}>
-        Back
-      </Button>
     </section>
   );
 }

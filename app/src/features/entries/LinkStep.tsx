@@ -62,7 +62,7 @@ export function LinkStep({
           Read link
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>
-          Back
+          Cancel
         </Button>
       </div>
     </form>

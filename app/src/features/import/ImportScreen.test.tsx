@@ -83,11 +83,6 @@ describe("choosing the file", () => {
     expect(accept?.split(",")).toEqual(expect.arrayContaining([".txt", ".json", ".zip"]));
   });
 
-  it("can go back without importing", async () => {
-    const { onClose } = open();
-    await userEvent.click(await screen.findByRole("button", { name: "Back" }));
-    expect(onClose).toHaveBeenCalled();
-  });
 });
 
 describe("a password-protected archive", () => {

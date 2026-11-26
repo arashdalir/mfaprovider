@@ -60,7 +60,7 @@ export function ImageStep({
         </p>
       )}
       <Button type="button" variant="outline" className="self-start" onClick={onCancel}>
-        Back
+        Cancel
       </Button>
     </section>
   );
