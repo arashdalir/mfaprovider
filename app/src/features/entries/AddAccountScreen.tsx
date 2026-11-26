@@ -6,6 +6,7 @@ import { useBack } from "@/lib/use-back";
 import type { DraftView } from "@/ipc/client";
 
 import { EntryForm } from "./EntryForm";
+import { CameraStep, useHasCamera } from "./CameraStep";
 import { ImageStep } from "./ImageStep";
 import { LinkStep } from "./LinkStep";
 
@@ -14,6 +15,7 @@ type Step =
   | { kind: "manual" }
   | { kind: "link" }
   | { kind: "image" }
+  | { kind: "camera" }
   | { kind: "review"; drafts: DraftView[]; chosen: DraftView | null };
 
 /** Add an account by typing it in, pasting an otpauth:// link, or reading a QR image. */
@@ -21,6 +23,7 @@ export function AddAccountScreen({ onDone, onCancel }: { onDone: () => void; onC
   const api = useApi();
   const [step, setStep] = useState<Step>({ kind: "choose" });
   const choose = () => setStep({ kind: "choose" });
+  const hasCamera = useHasCamera();
 
   function review(drafts: DraftView[]) {
     setStep({ kind: "review", drafts, chosen: drafts.length === 1 ? drafts[0] : null });
@@ -40,6 +43,8 @@ export function AddAccountScreen({ onDone, onCancel }: { onDone: () => void; onC
       return <LinkStep onDrafts={review} onCancel={choose} />;
     case "image":
       return <ImageStep onDrafts={review} onCancel={choose} />;
+    case "camera":
+      return <CameraStep onDrafts={review} />;
     case "review":
       return step.chosen ? (
         <EntryForm draft={step.chosen} onDone={onDone} onCancel={abandonDrafts} />
@@ -70,6 +75,9 @@ export function AddAccountScreen({ onDone, onCancel }: { onDone: () => void; onC
           <h2 className="text-lg font-semibold">Add account</h2>
           <Button onClick={() => setStep({ kind: "manual" })}>Enter details manually</Button>
           <Button onClick={() => setStep({ kind: "link" })}>Paste an otpauth:// link</Button>
+          {hasCamera && (
+            <Button onClick={() => setStep({ kind: "camera" })}>Scan a QR code with the camera</Button>
+          )}
           <Button onClick={() => setStep({ kind: "image" })}>Read a QR code from an image</Button>
           <Button variant="outline" className="self-start" onClick={onCancel}>
             Cancel

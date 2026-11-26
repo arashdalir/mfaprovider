@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiContext, type VaultApi } from "@/ipc/api-context";
 import { IpcCallError, type DraftView } from "@/ipc/client";
@@ -39,6 +39,36 @@ function pngFile(size = 10) {
 }
 
 describe("choosing how to add", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "mediaDevices");
+  });
+
+  const cameraButton = () => screen.queryByRole("button", { name: "Scan a QR code with the camera" });
+
+  it("offers the camera only when the device has one", async () => {
+    open();
+    expect(cameraButton()).not.toBeInTheDocument();
+  });
+
+  it("offers the camera when the device reports one", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { enumerateDevices: vi.fn().mockResolvedValue([{ kind: "videoinput" }]) },
+      configurable: true,
+    });
+    open();
+    expect(await screen.findByRole("button", { name: "Scan a QR code with the camera" })).toBeInTheDocument();
+  });
+
+  it("does not offer the camera when the device only has a microphone", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { enumerateDevices: vi.fn().mockResolvedValue([{ kind: "audioinput" }]) },
+      configurable: true,
+    });
+    open();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(cameraButton()).not.toBeInTheDocument();
+  });
+
   it("offers the three ways and can be cancelled", async () => {
     const { onCancel } = open();
     expect(screen.getByRole("button", { name: "Enter details manually" })).toBeInTheDocument();
