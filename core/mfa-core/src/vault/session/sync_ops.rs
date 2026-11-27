@@ -2,7 +2,10 @@
 //! reading and writing it is the caller's job (a storage provider).
 //!
 //! Anything that creates a sync file with new keys, or joins one, is split in two:
-//! `prepare_…` changes nothing, `commit_…` stores the result in the vault. None of this
+//! `prepare_…` changes nothing, `commit_…` stores the result in the vault.
+//!
+//! What changes or reveals the keys of an existing sync (new password, new master key,
+//! repair, turning off, showing the secret) needs the device password again. Nothing else
 //! counts as user activity, so syncing in the background never delays the idle lock.
 
 use std::collections::HashSet;
@@ -31,6 +34,10 @@ pub const MIN_SYNC_PASSWORD_CHARS: usize = 12;
 pub enum SyncError {
     #[error("sync is not turned on")]
     NotEnabled,
+    #[error("sync is already turned on")]
+    AlreadyEnabled,
+    #[error("the sync file can still be read, so there is nothing to repair")]
+    NothingToRepair,
     #[error("a sync password needs at least {MIN_SYNC_PASSWORD_CHARS} characters")]
     PasswordTooShort,
     #[error("a new master key needs a new place for the sync file")]
@@ -116,12 +123,11 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
         }))
     }
 
-    /// Builds a sync file with a fresh master key and sync secret: to turn sync on or, when
-    /// it already is on, to replace the master key. The latter needs a new location.
+    /// Builds the first sync file, to turn sync on.
     ///
     /// # Errors
-    /// [`SyncError::PasswordTooShort`], [`SyncError::SameLocation`], locked, or a failure to
-    /// derive a key or encrypt.
+    /// [`SyncError::PasswordTooShort`], [`SyncError::AlreadyEnabled`], locked, or a failure
+    /// to derive a key or encrypt.
     pub fn prepare_new_sync(
         &mut self,
         sync_password: &str,
@@ -129,10 +135,40 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
         kdf: KdfParams,
     ) -> Result<PendingSyncSetup, SyncError> {
         check_sync_password(sync_password)?;
-        let current = self.data()?.sync.as_ref();
-        if current.is_some_and(|sync| sync.location == location) {
+        if self.data()?.sync.is_some() {
+            return Err(SyncError::AlreadyEnabled);
+        }
+        self.new_sync_file(sync_password, location, kdf)
+    }
+
+    /// Replaces the master key and sync secret: a new sync file in a new place, which every
+    /// other device has to join again.
+    ///
+    /// # Errors
+    /// A wrong device password, [`SyncError::PasswordTooShort`],
+    /// [`SyncError::NotEnabled`], [`SyncError::SameLocation`], locked, or a failure to
+    /// derive a key or encrypt.
+    pub fn prepare_new_master_key(
+        &mut self,
+        device_password: &str,
+        sync_password: &str,
+        location: &str,
+        kdf: KdfParams,
+    ) -> Result<PendingSyncSetup, SyncError> {
+        check_sync_password(sync_password)?;
+        self.confirm_for_sync(device_password)?;
+        if self.sync_state()?.location == location {
             return Err(SyncError::SameLocation);
         }
+        self.new_sync_file(sync_password, location, kdf)
+    }
+
+    fn new_sync_file(
+        &mut self,
+        sync_password: &str,
+        location: &str,
+        kdf: KdfParams,
+    ) -> Result<PendingSyncSetup, SyncError> {
         let sync_id = random_array::<SYNC_ID_LENGTH>(&mut self.rng);
         let state = SyncState {
             sync_id,
@@ -251,14 +287,17 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
     /// with a new password, and is returned even if nothing else changed.
     ///
     /// # Errors
-    /// [`SyncError::PasswordTooShort`], or as [`VaultSession::sync`].
+    /// A wrong device password, [`SyncError::PasswordTooShort`], or as
+    /// [`VaultSession::sync`].
     pub fn change_sync_password(
         &mut self,
+        device_password: &str,
         file: &[u8],
         new_password: &str,
         kdf: KdfParams,
     ) -> Result<SyncStep, SyncError> {
         check_sync_password(new_password)?;
+        self.confirm_for_sync(device_password)?;
         let round = self.absorb(file)?;
         let header = self.new_header(new_password, kdf)?;
         Ok(SyncStep {
@@ -269,18 +308,27 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
     }
 
     /// A fresh file from this device's vault with the same master key and sync secret, to
-    /// replace a damaged or missing one when the user asks for it. There is nothing to check
-    /// the password against, so it simply becomes the sync password.
+    /// replace a damaged or missing one when the user asks for it. `found` is what is there
+    /// now, `None` if nothing is. There is nothing to check the sync password against, so it
+    /// simply becomes the sync password.
     ///
     /// # Errors
-    /// [`SyncError::PasswordTooShort`], [`SyncError::NotEnabled`], locked, or a failure to
-    /// derive a key or encrypt.
+    /// A wrong device password, [`SyncError::PasswordTooShort`], [`SyncError::NotEnabled`],
+    /// [`SyncError::NothingToRepair`] if `found` opens, [`SyncFileError::OtherMasterKey`] or
+    /// [`SyncFileError::Unsupported`] if it is a sync file this device must leave alone,
+    /// locked, or a failure to derive a key or encrypt.
     pub fn replacement_sync_file(
         &mut self,
+        device_password: &str,
         sync_password: &str,
+        found: Option<&[u8]>,
         kdf: KdfParams,
     ) -> Result<Upload, SyncError> {
         check_sync_password(sync_password)?;
+        self.confirm_for_sync(device_password)?;
+        if let Some(file) = found {
+            self.check_damaged(file)?;
+        }
         let state = self.sync_state()?;
         let (master_key, highest) = (state.master_key.clone(), state.highest_revision);
         let header = self.new_header(sync_password, kdf)?;
@@ -305,20 +353,38 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
     /// Forgets the sync settings. The accounts stay, and so does the sync file.
     ///
     /// # Errors
-    /// [`SyncError::NotEnabled`], locked, or the vault cannot be saved.
-    pub fn disable_sync(&mut self) -> Result<(), SyncError> {
-        self.sync_state()?;
+    /// A wrong device password, [`SyncError::NotEnabled`], locked, or the vault cannot be
+    /// saved.
+    pub fn disable_sync(&mut self, device_password: &str) -> Result<(), SyncError> {
+        self.confirm_for_sync(device_password)?;
         self.change_for_sync(|data| data.sync = None)
     }
 
-    /// The sync secret, for adding a device or printing the recovery sheet. Like revealing an
-    /// account's secret, it needs the device password again.
+    /// The sync secret, for adding a device or printing the recovery sheet.
     ///
     /// # Errors
     /// A wrong device password, [`SyncError::NotEnabled`], or locked.
     pub fn reveal_sync_secret(&mut self, device_password: &str) -> Result<SyncSecret, SyncError> {
-        self.verify_password(device_password)?;
+        self.confirm_for_sync(device_password)?;
         Ok(self.sync_state()?.sync_secret.clone())
+    }
+
+    fn confirm_for_sync(&mut self, device_password: &str) -> Result<(), SyncError> {
+        self.sync_state()?;
+        Ok(self.verify_password(device_password)?)
+    }
+
+    /// Only a file that is broken may be replaced: not one that opens, belongs to another
+    /// master key or was written by a newer version.
+    fn check_damaged(&mut self, file: &[u8]) -> Result<(), SyncError> {
+        let state = self.sync_state()?;
+        match open_with_master_key(&state.sync_id, &state.master_key, file) {
+            Ok(_) => Err(SyncError::NothingToRepair),
+            Err(
+                SyncFileError::Damaged | SyncFileError::InvalidHeader | SyncFileError::NotASyncFile,
+            ) => Ok(()),
+            Err(other) => Err(other.into()),
+        }
     }
 
     fn sync_state(&mut self) -> Result<&SyncState, SyncError> {

@@ -117,6 +117,22 @@ impl Device {
         }
     }
 
+    /// A new master key at `location`; returns the new file and secret.
+    fn new_master_key(&mut self, location: &str) -> (Vec<u8>, SyncSecret) {
+        let pending = self
+            .session
+            .prepare_new_master_key(&self.password, SYNC_PASSWORD, location, kdf())
+            .unwrap();
+        let (file, secret) = (pending.file().to_vec(), pending.sync_secret().clone());
+        self.session.commit_new_sync(pending).unwrap();
+        (file, secret)
+    }
+
+    fn repair(&mut self, found: Option<&[u8]>) -> Result<Upload, SyncError> {
+        self.session
+            .replacement_sync_file(&self.password, "another long passphrase", found, kdf())
+    }
+
     fn entries_in(&mut self, file: &[u8]) -> usize {
         let sync = self.session.data().unwrap().sync.as_ref().unwrap();
         let opened = open_with_master_key(&sync.sync_id, &sync.master_key, file).unwrap();
@@ -356,11 +372,8 @@ fn a_replacement_file_repairs_sync_for_the_other_devices() {
     let mut pair = pair();
     pair.clock.advance_secs(1);
     pair.first.add("kept");
-    let repaired = pair
-        .first
-        .session
-        .replacement_sync_file("another long passphrase", kdf())
-        .unwrap();
+    pair.cloud.truncate(40);
+    let repaired = pair.first.repair(Some(&pair.cloud)).unwrap();
     pair.first.write(&mut pair.cloud, Some(repaired));
     let opened = open_with_password("another long passphrase", &pair.secret, &pair.cloud);
     assert!(opened.is_ok());
@@ -375,7 +388,7 @@ fn after_a_password_change_other_devices_carry_on_and_keep_the_new_lock() {
     let step = pair
         .first
         .session
-        .change_sync_password(&pair.cloud, new_password, kdf())
+        .change_sync_password(&pair.first.password, &pair.cloud, new_password, kdf())
         .unwrap();
     pair.first.write(&mut pair.cloud, step.upload);
     assert!(open_with_password(SYNC_PASSWORD, &pair.secret, &pair.cloud).is_err());
@@ -390,17 +403,36 @@ fn after_a_password_change_other_devices_carry_on_and_keep_the_new_lock() {
 #[test]
 fn a_new_master_key_needs_a_new_place() {
     let mut pair = pair();
-    let same = pair
+    let same =
+        pair.first
+            .session
+            .prepare_new_master_key(&pair.first.password, SYNC_PASSWORD, HERE, kdf());
+    assert_eq!(same.unwrap_err(), SyncError::SameLocation);
+}
+
+#[test]
+fn turning_sync_on_again_is_refused_while_it_is_on() {
+    let mut pair = pair();
+    let again = pair
         .first
         .session
-        .prepare_new_sync(SYNC_PASSWORD, HERE, kdf());
-    assert_eq!(same.unwrap_err(), SyncError::SameLocation);
+        .prepare_new_sync(SYNC_PASSWORD, "cloud/other.mfasync", kdf());
+    assert_eq!(again.unwrap_err(), SyncError::AlreadyEnabled);
+}
+
+#[test]
+fn a_new_master_key_needs_sync_to_be_on() {
+    let mut first = device(1, &FakeClock::new());
+    let refused = first
+        .session
+        .prepare_new_master_key(&first.password, SYNC_PASSWORD, HERE, kdf());
+    assert_eq!(refused.unwrap_err(), SyncError::NotEnabled);
 }
 
 #[test]
 fn after_a_new_master_key_other_devices_must_join_again() {
     let mut pair = pair();
-    let (mut new_cloud, new_secret) = pair.first.turn_on("cloud/second.mfasync");
+    let (mut new_cloud, new_secret) = pair.first.new_master_key("cloud/second.mfasync");
     assert_ne!(pair.secret, new_secret);
     let refused = pair.second.session.sync(&new_cloud);
     assert_eq!(refused, Err(SyncError::File(SyncFileError::OtherMasterKey)));
@@ -411,12 +443,13 @@ fn after_a_new_master_key_other_devices_must_join_again() {
 #[test]
 fn turning_sync_off_keeps_the_accounts_and_forgets_the_keys() {
     let mut pair = pair();
-    pair.first.session.disable_sync().unwrap();
+    let password = pair.first.password.clone();
+    pair.first.session.disable_sync(&password).unwrap();
     assert_eq!(pair.first.session.sync_status(), Ok(None));
     let after = pair.first.session.sync(&pair.cloud);
     assert_eq!(after, Err(SyncError::NotEnabled));
     assert_eq!(
-        pair.first.session.disable_sync(),
+        pair.first.session.disable_sync(&password),
         Err(SyncError::NotEnabled)
     );
     assert_eq!(pair.first.names(), ["a", "b"]);
@@ -433,6 +466,63 @@ fn the_sync_secret_is_shown_only_for_the_device_password() {
         pair.first.session.reveal_sync_secret(&password),
         Ok(pair.secret)
     );
+}
+
+#[test]
+fn changing_anything_about_sync_needs_the_device_password() {
+    let mut pair = pair();
+    let before = pair.first.storage.bytes();
+    let session = &mut pair.first.session;
+    // The sync password is not the device password.
+    let wrong = SYNC_PASSWORD;
+    let refused = [
+        session
+            .change_sync_password(wrong, &pair.cloud, "the new long passphrase", kdf())
+            .unwrap_err(),
+        session
+            .prepare_new_master_key(wrong, SYNC_PASSWORD, "cloud/second.mfasync", kdf())
+            .unwrap_err(),
+        session
+            .replacement_sync_file(wrong, SYNC_PASSWORD, None, kdf())
+            .unwrap_err(),
+        session.disable_sync(wrong).unwrap_err(),
+    ];
+    let expected = SyncError::Session(SessionError::Vault(VaultError::UnwrapFailed));
+    for error in refused {
+        assert_eq!(error, expected);
+    }
+    assert_eq!(pair.first.storage.bytes(), before);
+}
+
+#[test]
+fn a_missing_file_can_be_replaced() {
+    let mut pair = pair();
+    assert!(pair.first.repair(None).is_ok());
+}
+
+#[test]
+fn a_file_that_still_opens_is_not_replaced() {
+    let mut pair = pair();
+    let cloud = pair.cloud.clone();
+    let refused = pair.first.repair(Some(&cloud));
+    assert_eq!(refused, Err(SyncError::NothingToRepair));
+}
+
+#[test]
+fn a_file_with_another_master_key_is_not_replaced() {
+    let mut pair = pair();
+    let (new_cloud, _) = pair.first.new_master_key("cloud/second.mfasync");
+    let refused = pair.second.repair(Some(&new_cloud));
+    assert_eq!(refused, Err(SyncError::File(SyncFileError::OtherMasterKey)));
+}
+
+#[test]
+fn a_file_from_a_newer_version_is_not_replaced() {
+    let mut pair = pair();
+    // The low byte of the format version.
+    pair.cloud[9] += 1;
+    let refused = pair.first.repair(Some(&pair.cloud));
+    assert_eq!(refused, Err(SyncError::File(SyncFileError::Unsupported)));
 }
 
 #[test]

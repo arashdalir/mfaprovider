@@ -20,4 +20,5 @@
 | [0016](0016-android-biometric-unlock-plugin.md) | Android biometric unlock: own Kotlin plugin, Keystore key bound to the biometric, core unlocks with a key | accepted |
 | [0017](0017-file-picker-does-not-lock.md) | The trip to a phone's file picker does not lock the vault (one departure, 2 minutes) | accepted |
 | [0018](0018-sync-keys-secrets-and-merge-rules.md) | Sync: separate master key for the sync file, opened by sync password + sync secret; separate device passwords (replaces ADR-0008's same-password rule); merge rules | accepted |
-| [0019](0019-sync-storage-providers.md) | Sync storage providers: one interface with declared guarantees, per-device provider settings, tolerance of old reads | proposed |
+| [0019](0019-sync-storage-providers.md) | Sync storage providers: one interface with declared guarantees, per-device provider settings, tolerance of old reads | accepted |
+| [0020](0020-device-password-before-changing-sync.md) | Sync: the device password again before changing keys, file or turning sync off; only a missing or broken file is repaired | accepted |
