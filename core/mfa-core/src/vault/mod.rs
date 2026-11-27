@@ -27,7 +27,10 @@ pub use kdf::{run_kdf_benchmark, tune_kdf_params, KdfParams};
 pub use merge::{merge, Merged};
 pub use model::{Entry, EntryId, Extra, Tombstone, VaultData};
 pub use rng::Rng;
-pub use session::{LockPolicy, SessionError, SystemEvent, VaultSession};
+pub use session::{
+    JoinPreview, LockPolicy, PendingJoin, PendingSyncSetup, SessionError, SyncError, SyncStatus,
+    SyncStep, SystemEvent, Upload, VaultSession, MIN_SYNC_PASSWORD_CHARS,
+};
 pub use storage::{MemoryStorage, Storage, StorageError};
 pub use sync_file::{
     open_with_master_key, open_with_password, MasterKey, OpenedSyncFile, SyncFileError, SyncHeader,

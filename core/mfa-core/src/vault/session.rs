@@ -16,6 +16,13 @@ use super::rng::Rng;
 use super::storage::{Storage, StorageError};
 use crate::otp::OtpRegistry;
 
+mod sync_ops;
+
+pub use sync_ops::{
+    JoinPreview, PendingJoin, PendingSyncSetup, SyncError, SyncStatus, SyncStep, Upload,
+    MIN_SYNC_PASSWORD_CHARS,
+};
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SessionError {
     #[error("the vault is locked")]
