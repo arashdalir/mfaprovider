@@ -8,6 +8,8 @@ use zeroize::{Zeroize, Zeroizing};
 
 use super::error::VaultError;
 use super::model::{Entry, EntryId, Extra, Tombstone, VaultData};
+use super::sync_secret::SyncSecret;
+use super::sync_state::SyncState;
 use crate::otp::Params;
 use crate::secret::Secret;
 
@@ -16,7 +18,15 @@ const SHARED_PAYLOAD_VERSION: i64 = 1;
 const PAD_BLOCK: usize = 1024;
 const PAD_MARKER: u8 = 0x80;
 
-const PAYLOAD_KEYS: [&str; 5] = ["v", "created_at", "updated_at", "entries", "tombstones"];
+const PAYLOAD_KEYS: [&str; 6] = [
+    "v",
+    "created_at",
+    "updated_at",
+    "entries",
+    "tombstones",
+    SYNC_KEY,
+];
+const SYNC_KEY: &str = "sync";
 const ENTRY_KEYS: [&str; 11] = [
     "id",
     "otp_type",
@@ -38,7 +48,12 @@ fn invalid(message: impl Into<String>) -> VaultError {
 /// Serialises to deterministic CBOR (map keys in ascending order).
 pub(super) fn encode(data: &VaultData) -> Result<Zeroizing<Vec<u8>>, VaultError> {
     reject_colliding_extras(data)?;
-    let tree = WipedOnDrop(vault_value(data));
+    let mut fields = shared_fields(data);
+    fields.insert("v".to_owned(), int(PAYLOAD_VERSION));
+    if let Some(sync) = &data.sync {
+        fields.insert(SYNC_KEY.to_owned(), sync_value(sync));
+    }
+    let tree = WipedOnDrop(map_value(fields, &data.extra));
     to_cbor(&tree.0)
 }
 
@@ -48,9 +63,14 @@ pub(super) fn decode(bytes: &[u8]) -> Result<VaultData, VaultError> {
     if version != PAYLOAD_VERSION {
         return Err(VaultError::UnsupportedPayloadVersion(version));
     }
-    decode_vault_fields(fields)
+    let sync = fields.0.remove(SYNC_KEY).map(decode_sync).transpose()?;
+    Ok(VaultData {
+        sync,
+        ..decode_vault_fields(fields)?
+    })
 }
 
+/// The fields every copy of a vault shares; `sync` is left empty.
 fn decode_vault_fields(mut fields: Fields) -> Result<VaultData, VaultError> {
     let created_at = fields.int("created_at")?;
     let updated_at = fields.int("updated_at")?;
@@ -69,6 +89,7 @@ fn decode_vault_fields(mut fields: Fields) -> Result<VaultData, VaultError> {
         updated_at,
         entries,
         tombstones,
+        sync: None,
         extra: fields.into_extra(),
     })
 }
@@ -79,18 +100,12 @@ pub(super) fn encode_shared(
     revision: u64,
 ) -> Result<Zeroizing<Vec<u8>>, VaultError> {
     reject_colliding_extras(data)?;
-    let mut vault = WipedOnDrop(vault_value(data));
-    if let Value::Map(pairs) = &mut vault.0 {
-        pairs.retain(|(key, _)| key.as_text() != Some("v"));
-    }
+    let vault = map_value(shared_fields(data), &data.extra);
     let tree = WipedOnDrop(map_value(
         BTreeMap::from([
             ("v".to_owned(), int(SHARED_PAYLOAD_VERSION)),
             ("revision".to_owned(), Value::Integer(revision.into())),
-            (
-                "vault".to_owned(),
-                std::mem::replace(&mut vault.0, Value::Null),
-            ),
+            ("vault".to_owned(), vault),
         ]),
         &Extra::new(),
     ));
@@ -108,6 +123,11 @@ pub(super) fn decode_shared(bytes: &[u8]) -> Result<(u64, VaultData), VaultError
         .filter(|revision| *revision > 0)
         .ok_or_else(|| invalid("`revision` must be 1 or more"))?;
     let vault = Fields::parse(fields.take("vault")?, "vault")?;
+    if vault.0.contains_key(SYNC_KEY) {
+        return Err(invalid(
+            "a sync file must not hold a device's sync settings",
+        ));
+    }
     // A field this version cannot keep would be lost on the next write.
     if !fields.into_extra().is_empty() {
         return Err(invalid("unknown field beside the vault"));
@@ -208,9 +228,8 @@ fn map_value(mut fields: BTreeMap<String, Value>, extra: &Extra) -> Value {
     )
 }
 
-fn vault_value(data: &VaultData) -> Value {
-    let fields = BTreeMap::from([
-        ("v".to_owned(), int(PAYLOAD_VERSION)),
+fn shared_fields(data: &VaultData) -> BTreeMap<String, Value> {
+    BTreeMap::from([
         ("created_at".to_owned(), int(data.created_at)),
         ("updated_at".to_owned(), int(data.updated_at)),
         (
@@ -221,8 +240,27 @@ fn vault_value(data: &VaultData) -> Value {
             "tombstones".to_owned(),
             Value::Array(data.tombstones.iter().map(tombstone_value).collect()),
         ),
+    ])
+}
+
+fn sync_value(sync: &SyncState) -> Value {
+    let fields = BTreeMap::from([
+        ("sync_id".to_owned(), Value::Bytes(sync.sync_id.to_vec())),
+        (
+            "master_key".to_owned(),
+            Value::Bytes(sync.master_key.to_vec()),
+        ),
+        (
+            "sync_secret".to_owned(),
+            Value::Bytes(sync.sync_secret.as_bytes().to_vec()),
+        ),
+        ("location".to_owned(), text(&sync.location)),
+        (
+            "highest_revision".to_owned(),
+            Value::Integer(sync.highest_revision.into()),
+        ),
     ]);
-    map_value(fields, &data.extra)
+    map_value(fields, &Extra::new())
 }
 
 fn entry_value(entry: &Entry) -> Value {
@@ -321,6 +359,12 @@ impl Fields {
         }
     }
 
+    fn fixed_bytes<const N: usize>(&mut self, key: &str) -> Result<[u8; N], VaultError> {
+        let bytes = Zeroizing::new(self.bytes(key)?);
+        <[u8; N]>::try_from(bytes.as_slice())
+            .map_err(|_| invalid(format!("`{key}` must be {N} bytes")))
+    }
+
     fn id(&mut self, key: &str) -> Result<EntryId, VaultError> {
         let bytes = self.bytes(key)?;
         <[u8; 16]>::try_from(bytes.as_slice())
@@ -351,6 +395,22 @@ impl Fields {
 
 fn wrong_type(key: &str, expected: &str) -> VaultError {
     invalid(format!("`{key}` must be {expected}"))
+}
+
+fn decode_sync(value: Value) -> Result<SyncState, VaultError> {
+    let mut fields = Fields::parse(value, "sync")?;
+    let state = SyncState {
+        sync_id: fields.fixed_bytes("sync_id")?,
+        master_key: Zeroizing::new(fields.fixed_bytes("master_key")?),
+        sync_secret: SyncSecret::from_bytes(fields.fixed_bytes("sync_secret")?),
+        location: fields.text("location")?,
+        highest_revision: u64::try_from(fields.int("highest_revision")?)
+            .map_err(|_| invalid("`highest_revision` is out of range"))?,
+    };
+    if !fields.into_extra().is_empty() {
+        return Err(invalid("unknown sync setting"));
+    }
+    Ok(state)
 }
 
 fn decode_entry(value: Value) -> Result<Entry, VaultError> {
@@ -405,6 +465,7 @@ fn decode_tags(items: Vec<Value>) -> Result<Vec<String>, VaultError> {
 mod tests {
     use super::super::test_support::{id, sample_vault};
     use super::*;
+    use crate::vault::test_support::sync_state;
 
     fn encoded(value: &Value) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -482,7 +543,11 @@ mod tests {
     fn entry_ids_must_be_sixteen_bytes() {
         let mut data = sample_vault();
         data.entries.truncate(1);
-        let mut tree = vault_value(&data);
+        let mut tree = map_value(shared_fields(&data), &data.extra);
+        let Value::Map(pairs) = &mut tree else {
+            unreachable!()
+        };
+        pairs.push((text("v"), int(1)));
         let Value::Map(pairs) = &mut tree else {
             unreachable!()
         };
@@ -551,5 +616,66 @@ mod tests {
     fn ids_in_tombstones_survive() {
         let data = decode(&encode(&sample_vault()).unwrap()).unwrap();
         assert_eq!(data.tombstones[0].id, id(3));
+    }
+
+    #[test]
+    fn sync_settings_survive_the_local_payload() {
+        let mut data = sample_vault();
+        data.sync = Some(sync_state("C:/cloud/vault.mfasync"));
+        assert_eq!(decode(&encode(&data).unwrap()).unwrap(), data);
+    }
+
+    #[test]
+    fn the_shared_payload_never_holds_the_sync_settings() {
+        let mut data = sample_vault();
+        data.sync = Some(sync_state("a-very-recognisable-location"));
+        let shared = encode_shared(&data, 1).unwrap();
+        for private in [
+            b"a-very-recognisable-location".as_slice(),
+            &[0x51; 16],
+            &[0x52; 32],
+            &[0x53; 16],
+        ] {
+            assert!(!shared.windows(private.len()).any(|part| part == private));
+        }
+        assert_eq!(decode_shared(&shared).unwrap(), (1, sample_vault()));
+    }
+
+    #[test]
+    fn a_shared_payload_carrying_sync_settings_is_refused() {
+        let mut fields = shared_fields(&sample_vault());
+        fields.insert(SYNC_KEY.to_owned(), sync_value(&sync_state("planted")));
+        let tree = map_value(
+            BTreeMap::from([
+                ("v".to_owned(), int(1)),
+                ("revision".to_owned(), int(1)),
+                ("vault".to_owned(), map_value(fields, &Extra::new())),
+            ]),
+            &Extra::new(),
+        );
+        let result = decode_shared(&to_cbor(&tree).unwrap());
+        assert!(matches!(result, Err(VaultError::InvalidPayload(_))));
+    }
+
+    #[test]
+    fn a_shared_payload_needs_a_positive_revision_and_nothing_unknown_beside_the_vault() {
+        let build = |revision: i64, extra: Option<&str>| {
+            let mut fields = BTreeMap::from([
+                ("v".to_owned(), int(1)),
+                ("revision".to_owned(), int(revision)),
+                (
+                    "vault".to_owned(),
+                    map_value(shared_fields(&sample_vault()), &Extra::new()),
+                ),
+            ]);
+            if let Some(key) = extra {
+                fields.insert(key.to_owned(), int(1));
+            }
+            decode_shared(&to_cbor(&map_value(fields, &Extra::new())).unwrap())
+        };
+        assert!(build(1, None).is_ok());
+        assert!(build(0, None).is_err());
+        assert!(build(-1, None).is_err());
+        assert!(build(1, Some("later")).is_err());
     }
 }

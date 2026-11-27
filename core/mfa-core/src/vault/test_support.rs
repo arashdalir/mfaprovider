@@ -54,6 +54,7 @@ pub(crate) fn sample_vault() -> VaultData {
             id: id(3),
             deleted_at: 1_700_000_400_000,
         }],
+        sync: None,
         extra: vault_extra,
     }
 }
@@ -122,5 +123,15 @@ pub(crate) fn entry(number: u8) -> Entry {
         created_at: 0,
         updated_at: 0,
         extra: Extra::new(),
+    }
+}
+
+pub(crate) fn sync_state(location: &str) -> super::sync_state::SyncState {
+    super::sync_state::SyncState {
+        sync_id: [0x51; 16],
+        master_key: zeroize::Zeroizing::new([0x52; 32]),
+        sync_secret: super::sync_secret::SyncSecret::from_bytes([0x53; 16]),
+        location: location.into(),
+        highest_revision: 4,
     }
 }

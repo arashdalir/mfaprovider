@@ -51,6 +51,8 @@ pub fn merge(local: VaultData, remote: VaultData) -> Merged {
         updated_at,
         entries: in_local_order(entries, &local_order),
         tombstones,
+        // Settings of this device; whatever the other copy holds is not ours to take.
+        sync: local.sync,
         extra,
     };
     let after = Summary::of(&data);
@@ -410,6 +412,19 @@ mod tests {
             ("late", "1", "2")
         );
         assert_eq!(merged.data.updated_at, 20);
+    }
+
+    #[test]
+    fn sync_settings_stay_with_the_local_copy_and_are_not_a_difference() {
+        let with = |location: &str| {
+            let mut data = vault(vec![], &[]);
+            data.sync = Some(crate::vault::test_support::sync_state(location));
+            data
+        };
+        let merged = merge(with("here"), with("there"));
+        assert_eq!(merged.data.sync.as_ref().unwrap().location, "here");
+        assert_eq!(flags(&merged), (false, false));
+        assert_eq!(merge(vault(vec![], &[]), with("there")).data.sync, None);
     }
 
     #[test]

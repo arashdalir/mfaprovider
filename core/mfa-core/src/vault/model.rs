@@ -4,6 +4,7 @@ use std::fmt;
 use ciborium::Value;
 
 use super::rng::{random_array, Rng};
+use super::sync_state::SyncState;
 use crate::otp::Params;
 use crate::secret::Secret;
 
@@ -105,6 +106,8 @@ pub struct VaultData {
     pub updated_at: i64,
     pub entries: Vec<Entry>,
     pub tombstones: Vec<Tombstone>,
+    /// This device's sync settings; `None` while sync is off. Never shared.
+    pub sync: Option<SyncState>,
     pub extra: Extra,
 }
 
@@ -116,6 +119,7 @@ impl VaultData {
             updated_at: now_ms,
             entries: Vec::new(),
             tombstones: Vec::new(),
+            sync: None,
             extra: Extra::new(),
         }
     }

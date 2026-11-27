@@ -14,6 +14,7 @@ mod session;
 mod storage;
 mod sync_file;
 mod sync_secret;
+mod sync_state;
 #[cfg(test)]
 mod test_support;
 
@@ -33,3 +34,4 @@ pub use sync_file::{
     SyncId, SYNC_ID_LENGTH,
 };
 pub use sync_secret::{SyncSecret, SyncSecretError, SYNC_SECRET_LENGTH};
+pub use sync_state::SyncState;

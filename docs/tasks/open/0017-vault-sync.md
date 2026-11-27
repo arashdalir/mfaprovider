@@ -70,6 +70,6 @@ A share *link* to a password-protected folder is a web page, not something an ap
   Not planned for tonight: shell, UI, Android file access, anything on the phone.
 
 ## Next step
-Plan item 2c. (Done: item 1 ADR-0019 proposed; 2a sync secret; 2b sync file container with golden vector. The golden value pins this implementation; only HKDF was checked against an independent vector. An unknown field beside `revision` and `vault` in the payload is refused, since it could not be kept.)
+Plan item 2d. (2c done: typed `sync` field. Done earlier: item 1 ADR-0019 proposed; 2a sync secret; 2b sync file container with golden vector. The golden value pins this implementation; only HKDF was checked against an independent vector. An unknown field beside `revision` and `vault` in the payload is refused, since it could not be kept.)
 
 **Not pushed:** from commit 7ddcae1 on, `git push` needs the user to sign in to GitHub again; CI has not run on these commits.
