@@ -70,4 +70,4 @@ A share *link* to a password-protected folder is a web page, not something an ap
   Not planned for tonight: shell, UI, Android file access, anything on the phone.
 
 ## Next step
-Plan item 1.
+Plan item 2a. (Item 1 done: ADR-0019 written, proposed.)
