@@ -14,7 +14,7 @@ pub enum IpcErrorCode {
     AlreadyExists,
     WrongPassword,
     PasswordRequired,
-    /// Biometrics has gone too long without the master password; type it.
+    /// Biometrics has gone too long without the device password; type it.
     PasswordDue,
     BiometricUnavailable,
     BiometricNotEnabled,

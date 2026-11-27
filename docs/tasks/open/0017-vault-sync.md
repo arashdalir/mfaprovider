@@ -39,7 +39,7 @@ A share *link* to a password-protected folder is a web page, not something an ap
 1. [x] Core: pure merge of two `VaultData` with tests (ADR-0018 rules). Does not depend on the key decision.
 2. [x] Core: sync file container (spec, with golden vector), sync secret text form, typed `sync` field in the local vault (never copied into the sync file or an export, with tests), turn on / join / sync cycle / change sync password / new master key. (ADR-0018 and the spec accepted 2026-11-27.)
 3. [ ] `mfa-sync`: `StorageProvider` trait (read with version, write only over that version), file implementation, fake for tests.
-4. [ ] Shell and UI: turn on / join (scan or type the secret) / turn off, recovery sheet, choose the file, status and warnings, change sync password, new master key, replace a damaged file, conflicted copies. Keep `docs/sync.md` true to what is built.
+4. [ ] Shell and UI: turn on / join (scan or type the secret) / turn off, recovery sheet, choose the file, status and warnings, change sync password, new master key, replace a damaged file, conflicted copies. Device password before changes, sync password twice for a repair (ADR-0020); names and one secret per form (ADR-0021). Keep `docs/sync.md` true to what is built.
 5. [ ] Android: Storage Access Framework plugin (pick or create a document, keep the permission); the picker excuse of ADR-0017 applies. **Biggest unknown:** whether the Drive and OneDrive apps give a lasting, writable document, and their writes are not atomic. Try this on the user's phone early.
 6. [ ] Tried across the PC and the phone; results recorded here.
 
@@ -82,5 +82,9 @@ A share *link* to a password-protected folder is a web page, not something an ap
 - 2026-11-27: The user **accepted ADR-0019** and agreed with the morning report’s suggestions: the app asks for the device password before changing the sync password, making a new master key, repairing the file or turning sync off; repair asks for the sync password twice and is offered only for a damaged or missing file. New request: password fields must be defined so password managers offer to save them, with the sync secret and the two passwords named apart so they never overwrite each other.
   Plan: (1) record this as ADRs; (2) core: require the device password for those operations, test first; (3) UI: name the existing password fields for password managers, keep other secret fields out of them; (4) docs. The sync screens do not exist yet; they get the same rules in step 4.
 
+- 2026-11-27: Done, checked locally. Core (ADR-0020): the device password is required for the sync password change, new master key (now `prepare_new_master_key`; `prepare_new_sync` refuses while sync is on), repair and turning off; `replacement_sync_file` takes what is there now and refuses a file that opens, has another master key or is from a newer version. UI (ADR-0021, proposed): "Master password" is now "Device password"; every password form has its own user name; the reveal-key password moved out of the account form into its own form (the button is now below Save); account fields have autocomplete off. Not seen in the running app, and **no password manager has been tried**.
+
 ## Next step
-The user reviews ADR-0019 and pushes (`git push` needs a GitHub sign-in), then CI must be checked. After that: step 3 (`mfa-sync` storage provider; its shape depends on ADR-0019).
+1. The user: finish the GitHub sign-in so the push goes through (then check CI), and review ADR-0021.
+2. Try a password manager on the phone (needs the new version installed): does it offer to save and fill the device password, which name does it show, and does opening it while the vault is unlocked (Show secret key, turning on fingerprint) lock the vault?
+3. Step 3: `mfa-sync` storage provider per ADR-0019, including its change of `sync.location` to `sync.provider` (core and format spec) and the warning when an old password lock returns.

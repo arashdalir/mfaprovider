@@ -92,7 +92,7 @@ pub struct BiometricStatus {
     /// The device offers it (a platform provider exists and a biometric is set up).
     pub available: bool,
     pub enabled: bool,
-    /// Enabled, but the master password has not been typed for too long.
+    /// Enabled, but the device password has not been typed for too long.
     pub password_due: bool,
     pub reprompt_days: u32,
 }
@@ -118,7 +118,7 @@ pub struct DuplicateView {
     pub matches: String,
 }
 
-/// The seed of one entry, returned only after the user re-enters the master password.
+/// The seed of one entry, returned only after the user re-enters the device password.
 #[derive(Serialize, TS)]
 #[ts(export)]
 pub struct RevealedSecret {

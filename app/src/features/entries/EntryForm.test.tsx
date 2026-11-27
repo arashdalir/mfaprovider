@@ -77,6 +77,22 @@ describe("adding an account", () => {
     expect(onDone).toHaveBeenCalled();
   });
 
+  it("keeps every account field away from autofill", async () => {
+    open({});
+    await screen.findByLabelText("Issuer");
+    for (const label of ["Issuer", "Account", "Secret key", /Tags/, "Notes", "Period"]) {
+      expect(screen.getByLabelText(label)).toHaveAttribute("autocomplete", "off");
+    }
+  });
+
+  it("asks for the device password outside the account form", async () => {
+    open({ entry });
+    await userEvent.click(await screen.findByRole("button", { name: "Show secret key…" }));
+    const password = screen.getByLabelText<HTMLInputElement>("Device password");
+    expect(password.form).not.toBe(screen.getByRole("form", { name: "Edit account" }));
+    expect(password.form).not.toBeNull();
+  });
+
   it("generates the parameter fields from the chosen type", async () => {
     open({});
     await screen.findByLabelText("Issuer");

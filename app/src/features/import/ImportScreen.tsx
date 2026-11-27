@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fileToBase64 } from "@/features/entries/file-to-base64";
+import { CredentialName } from "@/features/credentials/CredentialName";
+import { ZIP_PASSWORD_NAME } from "@/features/credentials/credential-names";
 import { useApi } from "@/ipc/api-context";
 import type { ImportFormatView, ImportPreview, ImportResult } from "@/ipc/client";
 import { describeError, isPasswordRequired } from "@/ipc/error-message";
@@ -151,9 +153,11 @@ export function ImportScreen({ onClose }: { onClose: () => void }) {
       </div>
       {locked !== null && (
         <form className="flex flex-col gap-2" onSubmit={submitPassword}>
+          <CredentialName name={ZIP_PASSWORD_NAME} />
           <Label htmlFor="archive-password">Password of the ZIP file</Label>
           <Input
             id="archive-password"
+            name="zip-file-password"
             type="password"
             autoComplete="off"
             value={password}

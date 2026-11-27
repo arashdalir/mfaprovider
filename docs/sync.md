@@ -68,6 +68,24 @@ The new device keeps its own password and fingerprint unlock. Accounts that are 
 ### The recovery sheet
 It holds the sync secret, as text and as a QR code. It holds **no password**. Keep it offline, away from the sync password, like a spare key. **If you lose all your joined devices and the sheet, nobody can open the sync file**, not even with the right password.
 
+### Changes that ask for the device password
+Showing the sync secret, changing the sync password, creating a new master key, repairing the sync file and turning sync off ask for your **device password** again ([ADR-0020](adr/0020-device-password-before-changing-sync.md)). A fingerprint does not replace it. A repair is offered only for a missing or damaged file and asks for the sync password twice, because a broken file offers nothing to check it against.
+
+## Password managers
+The app names each secret, so a password manager can keep them apart ([ADR-0021](adr/0021-password-manager-names.md), proposed). The two sync names will apply once the sync screens exist.
+
+| Secret | Name (the "user name" of the entry) |
+|---|---|
+| Device password | `mfa-provider device password (…)`, ending in the kind of device and a short code: one per device |
+| Sync password | `mfa-provider sync password` |
+| Sync secret | `mfa-provider sync secret` |
+| Password of an imported ZIP file | `mfa-provider ZIP file password` |
+
+- **Phone:** whether your password manager offers to save or fill these has not been tried yet.
+- **Windows:** the app's window does not offer to save passwords, and browser extensions do not reach it. Copy the entry from your manager by hand.
+- **Think before keeping the sync secret and the sync password in the same manager.** Whoever gets into it has both, and with the sync file that is everything. The secret still protects you if only the file leaks. Keeping the secret on the recovery sheet alone is the stricter choice.
+- Do not make a password manager your **only** copy if its second factor is a code in this app: you could be locked out of both.
+
 ## How changes are combined
 | Situation | Result |
 |---|---|

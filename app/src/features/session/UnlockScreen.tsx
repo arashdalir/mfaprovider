@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CredentialName } from "@/features/credentials/CredentialName";
+import { devicePasswordName } from "@/features/credentials/credential-names";
 import { useApi } from "@/ipc/api-context";
 import type { BiometricStatus } from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
@@ -75,10 +77,12 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           </p>
         )}
         <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+          <CredentialName name={devicePasswordName()} />
           <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Master password</Label>
+            <Label htmlFor="password">Device password</Label>
             <Input
               id="password"
+              name="device-password"
               type="password"
               autoComplete="current-password"
               autoFocus

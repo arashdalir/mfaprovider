@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiContext, type VaultApi } from "@/ipc/api-context";
 import { IpcCallError, type ImportItemView, type ImportPreview } from "@/ipc/client";
 import { fakeApi } from "@/test/fake-api";
+import { ZIP_PASSWORD_NAME } from "@/features/credentials/credential-names";
 
 import { ImportScreen } from "./ImportScreen";
 
@@ -110,6 +111,15 @@ describe("a password-protected archive", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open file" }));
     expect(importPreview).toHaveBeenLastCalledWith("otpauth-list", expect.any(String), "hunter2");
     expect(await screen.findByRole("region", { name: "Import preview" })).toBeInTheDocument();
+  });
+
+  it("keeps the archive's password under its own name, away from the vault's", async () => {
+    open({ importPreview: vi.fn().mockRejectedValue(needsPassword()) });
+    await pick(zip());
+    const password = await screen.findByLabelText<HTMLInputElement>("Password of the ZIP file");
+    expect(password.form?.querySelector('input[autocomplete="username"]')).toHaveValue(ZIP_PASSWORD_NAME);
+    expect(password).toHaveAttribute("name", "zip-file-password");
+    expect(password).toHaveAttribute("autocomplete", "off");
   });
 
   it("keeps asking after a wrong password, with the reason", async () => {

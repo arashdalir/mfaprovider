@@ -9,6 +9,6 @@ export type BiometricStatus = {
  */
 available: boolean, enabled: boolean, 
 /**
- * Enabled, but the master password has not been typed for too long.
+ * Enabled, but the device password has not been typed for too long.
  */
 password_due: boolean, reprompt_days: number, };

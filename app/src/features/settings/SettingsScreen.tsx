@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeSwitch } from "@/features/theme/ThemeSwitch";
 import type { Theme } from "@/features/theme/theme";
+import { CredentialName } from "@/features/credentials/CredentialName";
+import { devicePasswordName } from "@/features/credentials/credential-names";
 import { useApi } from "@/ipc/api-context";
 import type { BiometricStatus } from "@/ipc/client";
 import { describeError } from "@/ipc/error-message";
@@ -170,9 +172,11 @@ export function SettingsScreen({
                 void turnOnBiometrics();
               }}
             >
-              <Label htmlFor="biometric-password">Master password</Label>
+              <CredentialName name={devicePasswordName()} />
+              <Label htmlFor="biometric-password">Device password</Label>
               <Input
                 id="biometric-password"
+                name="device-password"
                 type="password"
                 autoComplete="current-password"
                 value={password}

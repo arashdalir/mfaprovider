@@ -105,7 +105,7 @@ export const ipc = {
   checkDraftDuplicate: (id: number, edits: DraftEditsRequest) =>
     call<DuplicateView | null>("check_draft_duplicate", { id, edits }),
   biometricStatus: () => call<BiometricStatus>("biometric_status"),
-  /** Asks for the master password again before the device keeps a copy of the vault key. */
+  /** Asks for the device password again before the device keeps a copy of the vault key. */
   biometricEnable: (password: string) => call<void>("biometric_enable", { password }),
   biometricDisable: () => call<void>("biometric_disable"),
   unlockWithBiometric: () => call<void>("unlock_with_biometric"),

@@ -361,7 +361,7 @@ impl<S: Storage, C: Clock, R: Rng> VaultSession<S, C, R> {
         Ok(())
     }
 
-    /// Changes the master password. The current password is checked again, so an unlocked
+    /// Changes the device password. The current password is checked again, so an unlocked
     /// but unattended session cannot silently change it. Entries are not re-encrypted:
     /// only the key slot is replaced.
     ///

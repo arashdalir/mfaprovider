@@ -32,7 +32,7 @@ impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
         }
     }
 
-    /// Turns biometric unlock on. The master password is asked again: only someone who knows
+    /// Turns biometric unlock on. The device password is asked again: only someone who knows
     /// it may leave a second way into the vault on this device.
     pub fn biometric_enable(&mut self, password: &str) -> Result<(), IpcError> {
         if self.biometrics.availability() != Availability::Available {
@@ -59,7 +59,7 @@ impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
         Ok(())
     }
 
-    /// Unlocks with the biometric. The UI falls back to the master password on any error.
+    /// Unlocks with the biometric. The UI falls back to the device password on any error.
     pub fn unlock_with_biometric(&mut self) -> Result<(), IpcError> {
         let settings = self.device.load();
         if !settings.biometric_enabled {
@@ -79,7 +79,7 @@ impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
         }
     }
 
-    /// How many days biometrics may go without the master password.
+    /// How many days biometrics may go without the device password.
     pub fn set_biometric_reprompt_days(&mut self, days: u32) -> Result<(), IpcError> {
         if days == 0 || days > MAX_REPROMPT_DAYS {
             return Err(IpcError::invalid_input(
@@ -95,7 +95,7 @@ impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
             .map_err(|_| IpcError::new(IpcErrorCode::StorageFailed))
     }
 
-    /// Called after the master password was typed correctly.
+    /// Called after the device password was typed correctly.
     pub(super) fn note_password_typed(&mut self) {
         let settings = DeviceSettings {
             last_password_ms: self.clock.unix_ms(),

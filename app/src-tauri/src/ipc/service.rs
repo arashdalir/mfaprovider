@@ -443,7 +443,7 @@ impl<S: Storage, C: Clock + Clone, R: Rng> VaultService<S, C, R> {
         Ok(())
     }
 
-    /// The seed of one entry, only after the master password is entered again.
+    /// The seed of one entry, only after the device password is entered again.
     pub fn reveal_secret(&mut self, id: &str, password: &str) -> Result<RevealedSecret, IpcError> {
         let id = parse_entry_id(id)?;
         self.session.verify_password(password)?;

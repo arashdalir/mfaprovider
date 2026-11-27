@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiContext } from "@/ipc/api-context";
 import { IpcCallError, type BiometricStatus } from "@/ipc/client";
 import { fakeApi } from "@/test/fake-api";
+import { devicePasswordName } from "@/features/credentials/credential-names";
 
 import { SettingsScreen } from "./SettingsScreen";
 import { loadSettings } from "./settings";
@@ -45,13 +46,20 @@ describe("SettingsScreen biometrics", () => {
     expect(screen.queryByLabelText("Unlock with fingerprint or face")).not.toBeInTheDocument();
   });
 
-  it("turns it on only after the master password is typed", async () => {
+  it("turns it on only after the device password is typed", async () => {
     const api = openWith(status({}));
     await userEvent.click(await screen.findByLabelText("Unlock with fingerprint or face"));
     expect(api.biometricEnable).not.toHaveBeenCalled();
-    await userEvent.type(screen.getByLabelText("Master password"), "pw");
+    await userEvent.type(screen.getByLabelText("Device password"), "pw");
     await userEvent.click(screen.getByRole("button", { name: "Turn on" }));
     expect(api.biometricEnable).toHaveBeenCalledWith("pw");
+  });
+
+  it("asks for it under the device password's name in password managers", async () => {
+    openWith(status({}));
+    await userEvent.click(await screen.findByLabelText("Unlock with fingerprint or face"));
+    const password = screen.getByLabelText<HTMLInputElement>("Device password");
+    expect(password.form?.querySelector('input[autocomplete="username"]')).toHaveValue(devicePasswordName());
   });
 
   it("says so when the password is wrong and keeps it off", async () => {
@@ -59,9 +67,9 @@ describe("SettingsScreen biometrics", () => {
       biometricEnable: vi.fn().mockRejectedValue(new IpcCallError({ code: "wrong_password", message: null })),
     });
     await userEvent.click(await screen.findByLabelText("Unlock with fingerprint or face"));
-    await userEvent.type(screen.getByLabelText("Master password"), "nope{enter}");
+    await userEvent.type(screen.getByLabelText("Device password"), "nope{enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password.");
-    expect(screen.getByLabelText("Master password")).toHaveValue("");
+    expect(screen.getByLabelText("Device password")).toHaveValue("");
   });
 
   it("turns it off and changes the re-prompt period", async () => {

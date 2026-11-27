@@ -22,7 +22,7 @@ describe("CreateVaultScreen", () => {
   it("does not call the core while the passwords are unacceptable", async () => {
     const api = fakeApi();
     render(withApi(api, <CreateVaultScreen onCreated={vi.fn()} />));
-    await userEvent.type(screen.getByLabelText("Master password"), "short");
+    await userEvent.type(screen.getByLabelText("Device password"), "short");
     await userEvent.click(screen.getByRole("button", { name: "Create vault" }));
     expect(screen.getByRole("alert")).toHaveTextContent(/at least 8/);
     expect(api.createVault).not.toHaveBeenCalled();
@@ -31,8 +31,8 @@ describe("CreateVaultScreen", () => {
   it("flags a mismatching repeat", async () => {
     const api = fakeApi();
     render(withApi(api, <CreateVaultScreen onCreated={vi.fn()} />));
-    await userEvent.type(screen.getByLabelText("Master password"), "long enough");
-    await userEvent.type(screen.getByLabelText("Repeat master password"), "long enough!");
+    await userEvent.type(screen.getByLabelText("Device password"), "long enough");
+    await userEvent.type(screen.getByLabelText("Repeat device password"), "long enough!");
     await userEvent.click(screen.getByRole("button", { name: "Create vault" }));
     expect(screen.getByRole("alert")).toHaveTextContent(/do not match/);
     expect(api.createVault).not.toHaveBeenCalled();
@@ -42,8 +42,8 @@ describe("CreateVaultScreen", () => {
     const api = fakeApi();
     const onCreated = vi.fn();
     render(withApi(api, <CreateVaultScreen onCreated={onCreated} />));
-    await userEvent.type(screen.getByLabelText("Master password"), "long enough");
-    await userEvent.type(screen.getByLabelText("Repeat master password"), "long enough");
+    await userEvent.type(screen.getByLabelText("Device password"), "long enough");
+    await userEvent.type(screen.getByLabelText("Repeat device password"), "long enough");
     await userEvent.click(screen.getByRole("button", { name: "Create vault" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     expect(api.createVault).toHaveBeenCalledWith("long enough");
@@ -55,8 +55,8 @@ describe("CreateVaultScreen", () => {
     });
     const onCreated = vi.fn();
     render(withApi(api, <CreateVaultScreen onCreated={onCreated} />));
-    await userEvent.type(screen.getByLabelText("Master password"), "long enough");
-    await userEvent.type(screen.getByLabelText("Repeat master password"), "long enough");
+    await userEvent.type(screen.getByLabelText("Device password"), "long enough");
+    await userEvent.type(screen.getByLabelText("Repeat device password"), "long enough");
     await userEvent.click(screen.getByRole("button", { name: "Create vault" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not be read or written/);
     expect(onCreated).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ describe("UnlockScreen", () => {
     const api = fakeApi();
     const onUnlocked = vi.fn();
     render(withApi(api, <UnlockScreen onUnlocked={onUnlocked} />));
-    await userEvent.type(screen.getByLabelText("Master password"), "my password{enter}");
+    await userEvent.type(screen.getByLabelText("Device password"), "my password{enter}");
     await waitFor(() => expect(onUnlocked).toHaveBeenCalled());
     expect(api.unlock).toHaveBeenCalledWith("my password");
   });
@@ -79,9 +79,9 @@ describe("UnlockScreen", () => {
       unlock: vi.fn().mockRejectedValue(new IpcCallError({ code: "wrong_password", message: null })),
     });
     render(withApi(api, <UnlockScreen onUnlocked={vi.fn()} />));
-    await userEvent.type(screen.getByLabelText("Master password"), "nope{enter}");
+    await userEvent.type(screen.getByLabelText("Device password"), "nope{enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password.");
-    expect(screen.getByLabelText("Master password")).toHaveValue("");
+    expect(screen.getByLabelText("Device password")).toHaveValue("");
   });
 
   const bio = (over: object) =>

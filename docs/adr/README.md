@@ -22,3 +22,4 @@
 | [0018](0018-sync-keys-secrets-and-merge-rules.md) | Sync: separate master key for the sync file, opened by sync password + sync secret; separate device passwords (replaces ADR-0008's same-password rule); merge rules | accepted |
 | [0019](0019-sync-storage-providers.md) | Sync storage providers: one interface with declared guarantees, per-device provider settings, tolerance of old reads | accepted |
 | [0020](0020-device-password-before-changing-sync.md) | Sync: the device password again before changing keys, file or turning sync off; only a missing or broken file is repaired | accepted |
+| [0021](0021-password-manager-names.md) | Password managers: a user name per secret, one secret per form | proposed |

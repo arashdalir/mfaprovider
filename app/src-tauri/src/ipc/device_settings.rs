@@ -1,5 +1,5 @@
 //! Settings that belong to this device, not to the vault: whether biometric unlock is on, when
-//! the master password was last typed and how long biometrics may go without it. Kept next to
+//! the device password was last typed and how long biometrics may go without it. Kept next to
 //! the vault file, never inside it and never synced (ADR-0003, ADR-0008).
 
 use std::path::PathBuf;
@@ -14,7 +14,7 @@ pub const MAX_REPROMPT_DAYS: u32 = 365;
 #[serde(default)]
 pub struct DeviceSettings {
     pub biometric_enabled: bool,
-    /// Unix milliseconds of the last unlock or enabling with the master password.
+    /// Unix milliseconds of the last unlock or enabling with the device password.
     pub last_password_ms: i64,
     pub reprompt_days: u32,
 }
@@ -30,7 +30,7 @@ impl Default for DeviceSettings {
 }
 
 impl DeviceSettings {
-    /// True once biometrics has gone `reprompt_days` without the master password.
+    /// True once biometrics has gone `reprompt_days` without the device password.
     #[must_use]
     pub fn password_due(&self, now_ms: i64) -> bool {
         let allowed_ms = i64::from(self.reprompt_days) * 24 * 60 * 60 * 1000;
