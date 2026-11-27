@@ -84,7 +84,9 @@ A share *link* to a password-protected folder is a web page, not something an ap
 
 - 2026-11-27: Done, checked locally. Core (ADR-0020): the device password is required for the sync password change, new master key (now `prepare_new_master_key`; `prepare_new_sync` refuses while sync is on), repair and turning off; `replacement_sync_file` takes what is there now and refuses a file that opens, has another master key or is from a newer version. UI (ADR-0021, proposed): "Master password" is now "Device password"; every password form has its own user name; the reveal-key password moved out of the account form into its own form (the button is now below Save); account fields have autocomplete off. Not seen in the running app, and **no password manager has been tried**.
 
+- 2026-11-27: Pushed after the user’s GitHub sign-in; CI passed on 35603a8.
+
 ## Next step
-1. The user: finish the GitHub sign-in so the push goes through (then check CI), and review ADR-0021.
+1. The user: review ADR-0021.
 2. Try a password manager on the phone (needs the new version installed): does it offer to save and fill the device password, which name does it show, and does opening it while the vault is unlocked (Show secret key, turning on fingerprint) lock the vault?
 3. Step 3: `mfa-sync` storage provider per ADR-0019, including its change of `sync.location` to `sync.provider` (core and format spec) and the warning when an old password lock returns.
