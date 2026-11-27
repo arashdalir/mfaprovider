@@ -52,5 +52,7 @@ A share *link* to a password-protected folder is a web page, not something an ap
 
 - 2026-11-27: Checked over adb on the Pixel: OneDrive 7.64.2 (`com.microsoft.skydrive`) is installed and registers a documents provider (`content.StorageAccessProvider`). This says nothing yet about whether a picked file stays writable.
 
+- 2026-11-27: OneDrive trial built at the user's request: a temporary debug-only activity "Sync trial" in `app/src-tauri/gen/android/app/src/debug/` (**deliberately uncommitted; delete the folder afterwards**), writing only to files whose name contains `sync-trial`. Dummy file `mfa-sync-trial.txt` created in the PC's OneDrive folder. Four questions: pick the file; keep access after a restart; write and have it upload; see a change made on the PC.
+
 ## Next step
-Find out whether OneDrive on the user's phone offers other apps a lasting, writable file (step 5 trial), then step 2.
+Run the trial with the user, record the answers, delete the debug folder, then step 2.
