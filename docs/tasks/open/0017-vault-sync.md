@@ -62,5 +62,12 @@ A share *link* to a password-protected folder is a web page, not something an ap
   Not tried: creating a new document from the app, `ContentResolver.refresh`, offline behaviour, writing while stale, interrupted writes, large delays. The phone log was lost in the restart.
   **For the design:** one read must not be taken as current. A stale read is harmless to merge, but a write after it can replace a newer cloud version, and a content-hash version check would not notice; devices re-merge their own changes later (a password-slot change is the exception).
 
+- 2026-11-27: Create trial: the user created `mfa-sync-trial-created.txt` from the phone. **Unconfirmed:** the file was not found anywhere in the PC's OneDrive folder; where it was saved is not known (phone log lost, adb unreachable). Test code (`src/debug`) deleted; the installed app on the phone still has the trial screen until the next install.
+- 2026-11-27: The user went to sleep and asked for the next steps to be planned and carried out, to be checked tomorrow. Plan, in order:
+  1. Write ADR-0019 (storage providers, location settings, stale reads), **proposed only**; no accepted document is changed.
+  2. Step 2 in `mfa-core`, test first, each part committed on its own: (a) sync secret and its text/QR form; (b) sync file container per the accepted spec, with golden vector; (c) typed `sync` field in the local vault, never copied by a merge or into a sync file; (d) session operations: turn on, join, sync cycle, change sync password, new master key, repair. The location stays the accepted spec's `location: text` until ADR-0019 is accepted.
+  3. Update `docs/sync.md` and this file, push, check CI.
+  Not planned for tonight: shell, UI, Android file access, anything on the phone.
+
 ## Next step
-Decide on the two optional trials (refresh before reading; creating a document), then delete `gen/android/app/src/debug/` and start step 2. Awaiting the user's answer on ADR-0019 (storage providers).
+Plan item 1.
