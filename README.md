@@ -36,7 +36,7 @@ pnpm tauri dev                          # run
 pnpm tauri build --no-bundle --debug    # build without installers
 ```
 
-Android: see [docs/android.md](docs/android.md).
+Android: see [docs/android.md](docs/android.md). Sync (designed, not yet available): [docs/sync.md](docs/sync.md).
 
 Dependency policy: `cargo deny --manifest-path core/Cargo.toml check` and `cargo deny --manifest-path app/src-tauri/Cargo.toml check` (config: `deny.toml`); `pnpm audit` for the UI.
 
