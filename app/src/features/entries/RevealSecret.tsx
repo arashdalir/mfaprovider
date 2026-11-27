@@ -18,9 +18,15 @@ type Phase =
 const svgSource = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
 /** Shows an account's secret key, but only after the device password is entered again. */
-export function RevealSecret({ entryId }: { entryId: string }) {
+export function RevealSecret({
+  entryId,
+  startAsking = false,
+}: {
+  entryId: string;
+  startAsking?: boolean;
+}) {
   const api = useApi();
-  const [phase, setPhase] = useState<Phase>({ kind: "hidden" });
+  const [phase, setPhase] = useState<Phase>({ kind: startAsking ? "asking" : "hidden" });
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

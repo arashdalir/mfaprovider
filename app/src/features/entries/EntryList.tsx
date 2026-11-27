@@ -8,6 +8,7 @@ import { describeError } from "@/ipc/error-message";
 import { loadSettings } from "@/features/settings/settings";
 
 import { copyWithAutoClear } from "./clipboard";
+import type { StartWith } from "./EntryForm";
 import { EntryRow } from "./EntryRow";
 import { allTags, filterEntries } from "./filter";
 import { useEntries } from "./useEntries";
@@ -20,7 +21,7 @@ export function EntryList({
   onEdit,
   copy = copyWithConfiguredDelay,
 }: {
-  onEdit: (entry: EntryView) => void;
+  onEdit: (entry: EntryView, startWith?: StartWith) => void;
   copy?: (text: string) => Promise<void>;
 }) {
   const api = useApi();
@@ -102,7 +103,7 @@ export function EntryList({
                 hideCodes={hideCodes}
                 onCopy={(code) => void run(() => copy(code), "Code copied. It will be cleared shortly.")}
                 onNextCode={() => void run(() => api.advanceCounter(entry.id))}
-                onEdit={() => onEdit(entry)}
+                onEdit={(startWith) => onEdit(entry, startWith)}
                 onMoveUp={
                   canMove && position > 0
                     ? () => void run(() => api.moveEntry(entry.id, position - 1))

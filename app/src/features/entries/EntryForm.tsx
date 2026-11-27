@@ -27,11 +27,15 @@ import {
 } from "./form-model";
 import { typeLabel } from "./type-labels";
 
+/** An action of an existing account that the editor can open with. */
+export type StartWith = "delete" | "reveal";
+
 interface EntryFormProps {
   /** The account to edit; absent when adding. */
   entry?: EntryView;
   /** An account read from a link or QR code: its secret is already held by the core. */
   draft?: DraftView;
+  startWith?: StartWith;
   onDone: () => void;
   onCancel: () => void;
 }
@@ -68,6 +72,7 @@ export function EntryForm(props: EntryFormProps) {
 function FormBody({
   entry,
   draft,
+  startWith,
   types,
   onDone,
   onCancel,
@@ -83,7 +88,7 @@ function FormBody({
   const [showSecret, setShowSecret] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(startWith === "delete");
   const [duplicate, setDuplicate] = useState<DuplicateView | null>(null);
 
   useEffect(() => {
@@ -281,14 +286,19 @@ function FormBody({
               >
                 Delete permanently
               </Button>
-              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)}>
+              <Button
+              type="button"
+              variant="outline"
+              autoFocus
+              onClick={() => setConfirmingDelete(false)}
+            >
                 Keep
               </Button>
             </div>
           </div>
         )}
       </form>
-      {entry && <RevealSecret entryId={entry.id} />}
+      {entry && <RevealSecret entryId={entry.id} startAsking={startWith === "reveal"} />}
     </div>
   );
 }

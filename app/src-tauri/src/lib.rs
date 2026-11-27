@@ -1,3 +1,5 @@
+#[cfg(windows)]
+mod browser_shortcuts;
 pub mod ipc;
 #[cfg(any(target_os = "android", test))]
 mod keystore;
@@ -63,6 +65,10 @@ pub fn run() {
                 biometric_provider(app),
             ));
             spawn_idle_ticker(app.handle().clone());
+            #[cfg(windows)]
+            for window in app.webview_windows().values() {
+                browser_shortcuts::disable(window)?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

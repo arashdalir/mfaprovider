@@ -73,6 +73,8 @@ dependencies = [
  "tauri",
  "tauri-build",
  "ts-rs",
+ "webview2-com",
+ "windows-core",
  "zeroize",
  "zip",
 ]

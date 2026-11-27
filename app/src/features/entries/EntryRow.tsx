@@ -2,8 +2,15 @@ import { ChevronDown, ChevronUp, Eye, EyeOff, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import type { EntryView } from "@/ipc/client";
 
+import type { StartWith } from "./EntryForm";
 import { formatCode } from "./format";
 
 const LOW_SECONDS = 5;
@@ -28,7 +35,8 @@ export interface EntryRowProps {
   hideCodes: boolean;
   onCopy: (code: string) => void;
   onNextCode: () => void;
-  onEdit: () => void;
+  /** Opens the account's editor, optionally at one of its actions. */
+  onEdit: (startWith?: StartWith) => void;
   /** Absent while the list is filtered, when moving would be ambiguous. */
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -44,53 +52,104 @@ export function EntryRow({
   onMoveDown,
 }: EntryRowProps) {
   const title = `${entry.issuer} · ${entry.account}`;
+  const reveal = useReveal();
+  const masked = hideCodes && !reveal.revealed;
+  const toggle = hideCodes ? (masked ? reveal.show : reveal.hide) : undefined;
   return (
-    <li className="flex items-center gap-2 rounded-lg border p-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-muted-foreground">{title}</p>
-        <CodeArea
-          entry={entry}
-          title={title}
-          hideCodes={hideCodes}
-          onCopy={onCopy}
-          onNextCode={onNextCode}
-        />
-      </div>
-      <Button variant="ghost" size="icon" aria-label={`Edit ${title}`} onClick={onEdit}>
-        <Pencil />
-      </Button>
-      <div className="flex flex-col">
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={`Move ${title} up`}
-          disabled={!onMoveUp}
-          onClick={onMoveUp}
-        >
-          <ChevronUp />
+    <ContextMenu>
+      <ContextMenuTrigger render={<li className="flex items-center gap-2 rounded-lg border p-3" />}>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-muted-foreground">{title}</p>
+          <CodeArea
+            entry={entry}
+            title={title}
+            masked={masked}
+            onToggle={toggle}
+            onCopy={onCopy}
+            onNextCode={onNextCode}
+          />
+        </div>
+        <Button variant="ghost" size="icon" aria-label={`Edit ${title}`} onClick={() => onEdit()}>
+          <Pencil />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={`Move ${title} down`}
-          disabled={!onMoveDown}
-          onClick={onMoveDown}
-        >
-          <ChevronDown />
-        </Button>
-      </div>
-    </li>
+        <div className="flex flex-col">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Move ${title} up`}
+            disabled={!onMoveUp}
+            onClick={onMoveUp}
+          >
+            <ChevronUp />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Move ${title} down`}
+            disabled={!onMoveDown}
+            onClick={onMoveDown}
+          >
+            <ChevronDown />
+          </Button>
+        </div>
+      </ContextMenuTrigger>
+      <EntryMenu
+        entry={entry}
+        masked={masked}
+        onToggle={toggle}
+        onCopy={onCopy}
+        onNextCode={onNextCode}
+        onEdit={onEdit}
+      />
+    </ContextMenu>
+  );
+}
+
+type CodeActions = Pick<EntryRowProps, "entry" | "onCopy" | "onNextCode"> & {
+  masked: boolean;
+  /** Absent when codes are always shown. */
+  onToggle?: () => void;
+};
+
+function EntryMenu({
+  entry,
+  masked,
+  onToggle,
+  onCopy,
+  onNextCode,
+  onEdit,
+}: CodeActions & Pick<EntryRowProps, "onEdit">) {
+  const { code } = entry;
+  return (
+    <ContextMenuContent>
+      {code.state === "ready" && (
+        <>
+          <ContextMenuItem onClick={() => onCopy(code.text)}>Copy code</ContextMenuItem>
+          {onToggle && (
+            <ContextMenuItem onClick={onToggle}>{masked ? "Show code" : "Hide code"}</ContextMenuItem>
+          )}
+          {code.period_seconds === null && (
+            <ContextMenuItem onClick={onNextCode}>Next code</ContextMenuItem>
+          )}
+        </>
+      )}
+      <ContextMenuItem onClick={() => onEdit()}>Edit…</ContextMenuItem>
+      <ContextMenuItem onClick={() => onEdit("reveal")}>Show secret key…</ContextMenuItem>
+      <ContextMenuItem destructive onClick={() => onEdit("delete")}>
+        Delete…
+      </ContextMenuItem>
+    </ContextMenuContent>
   );
 }
 
 function CodeArea({
   entry,
   title,
-  hideCodes,
+  masked,
+  onToggle,
   onCopy,
   onNextCode,
-}: Pick<EntryRowProps, "entry" | "hideCodes" | "onCopy" | "onNextCode"> & { title: string }) {
-  const { revealed, show, hide } = useReveal();
+}: CodeActions & { title: string }) {
   const { code } = entry;
   if (code.state === "unsupported") {
     return (
@@ -104,7 +163,6 @@ function CodeArea({
   }
   const remaining = code.seconds_remaining;
   const period = code.period_seconds;
-  const masked = hideCodes && !revealed;
   return (
     <div className="flex items-center gap-3">
       <Button
@@ -115,13 +173,13 @@ function CodeArea({
       >
         {masked ? MASKED_CODE : formatCode(code.text)}
       </Button>
-      {hideCodes && (
+      {onToggle && (
         <Button
           variant="outline"
           size="sm"
           className={TOGGLE_WIDTH}
           aria-label={`${masked ? "Show" : "Hide"} code for ${title}`}
-          onClick={masked ? show : hide}
+          onClick={onToggle}
         >
           {masked ? <Eye /> : <EyeOff />} {masked ? "Show" : "Hide"}
         </Button>

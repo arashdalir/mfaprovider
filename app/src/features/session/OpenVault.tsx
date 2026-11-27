@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { BackButton } from "@/components/BackButton";
 import { Button } from "@/components/ui/button";
 import { AddAccountScreen } from "@/features/entries/AddAccountScreen";
-import { EntryForm } from "@/features/entries/EntryForm";
+import { EntryForm, type StartWith } from "@/features/entries/EntryForm";
 import { EntryList } from "@/features/entries/EntryList";
 import { ImportScreen } from "@/features/import/ImportScreen";
 import { SettingsScreen } from "@/features/settings/SettingsScreen";
@@ -18,7 +18,7 @@ import { useActivityReporter } from "./useActivityReporter";
 type View =
   | { kind: "list" }
   | { kind: "add" }
-  | { kind: "edit"; entry: EntryView }
+  | { kind: "edit"; entry: EntryView; startWith?: StartWith }
   | { kind: "import" }
   | { kind: "settings" };
 
@@ -52,7 +52,13 @@ export function OpenVault({
         return <AddAccountScreen onDone={backToList} onCancel={backToList} />;
       case "edit":
         return (
-          <EntryForm key={current.entry.id} entry={current.entry} onDone={backToList} onCancel={backToList} />
+          <EntryForm
+            key={current.entry.id}
+            entry={current.entry}
+            startWith={current.startWith}
+            onDone={backToList}
+            onCancel={backToList}
+          />
         );
     }
   }
@@ -81,7 +87,7 @@ export function OpenVault({
           </Button>
         </div>
       </div>
-      <EntryList onEdit={(entry) => setView({ kind: "edit", entry })} />
+      <EntryList onEdit={(entry, startWith) => setView({ kind: "edit", entry, startWith })} />
     </div>
   );
 }

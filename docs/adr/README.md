@@ -23,3 +23,4 @@
 | [0019](0019-sync-storage-providers.md) | Sync storage providers: one interface with declared guarantees, per-device provider settings, tolerance of old reads | accepted |
 | [0020](0020-device-password-before-changing-sync.md) | Sync: the device password again before changing keys, file or turning sync off; only a missing or broken file is repaired | accepted |
 | [0021](0021-password-manager-names.md) | Password managers: a user name per secret, one secret per form | proposed |
+| [0022](0022-no-browser-menu-or-shortcuts.md) | No browser menu or shortcuts in the app; accounts get their own menu | proposed |

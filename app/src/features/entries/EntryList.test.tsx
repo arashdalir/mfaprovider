@@ -78,7 +78,7 @@ describe("EntryList", () => {
   it("asks to edit the chosen account", async () => {
     const { onEdit } = show([github, google]);
     await userEvent.click(await screen.findByRole("button", { name: "Edit Google · bob" }));
-    expect(onEdit).toHaveBeenCalledWith(google);
+    expect(onEdit).toHaveBeenCalledWith(google, undefined);
   });
 
   it("says when there are no accounts", async () => {

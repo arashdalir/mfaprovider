@@ -44,7 +44,9 @@ const entry: EntryView = {
   code: { state: "unsupported" },
 };
 
-function open(props: { entry?: EntryView; draft?: DraftView }, overrides: Partial<VaultApi> = {}) {
+function open(
+  props: { entry?: EntryView; draft?: DraftView; startWith?: "delete" | "reveal" },
+  overrides: Partial<VaultApi> = {}) {
   const api = fakeApi({ listOtpTypes: vi.fn().mockResolvedValue(types), ...overrides });
   const onDone = vi.fn();
   const onCancel = vi.fn();
@@ -55,6 +57,21 @@ function open(props: { entry?: EntryView; draft?: DraftView }, overrides: Partia
   );
   return { api, onDone, onCancel };
 }
+
+describe("opening an account for one action", () => {
+  it("asks to confirm a delete, with keeping it as the safe choice", async () => {
+    const { api } = open({ entry, startWith: "delete" });
+    expect(await screen.findByRole("alertdialog", { name: "Confirm delete" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep" })).toHaveFocus();
+    expect(api.deleteEntry).not.toHaveBeenCalled();
+  });
+
+  it("asks for the device password to show the key", async () => {
+    const { api } = open({ entry, startWith: "reveal" });
+    expect(await screen.findByLabelText("Device password")).toHaveFocus();
+    expect(api.revealSecret).not.toHaveBeenCalled();
+  });
+});
 
 describe("adding an account", () => {
   it("adds a TOTP account with schema defaults", async () => {
