@@ -12,6 +12,7 @@ mod payload;
 mod rng;
 mod session;
 mod storage;
+mod sync_file;
 mod sync_secret;
 #[cfg(test)]
 mod test_support;
@@ -27,4 +28,8 @@ pub use model::{Entry, EntryId, Extra, Tombstone, VaultData};
 pub use rng::Rng;
 pub use session::{LockPolicy, SessionError, SystemEvent, VaultSession};
 pub use storage::{MemoryStorage, Storage, StorageError};
+pub use sync_file::{
+    open_with_master_key, open_with_password, MasterKey, OpenedSyncFile, SyncFileError, SyncHeader,
+    SyncId, SYNC_ID_LENGTH,
+};
 pub use sync_secret::{SyncSecret, SyncSecretError, SYNC_SECRET_LENGTH};

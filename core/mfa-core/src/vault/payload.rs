@@ -12,6 +12,7 @@ use crate::otp::Params;
 use crate::secret::Secret;
 
 const PAYLOAD_VERSION: i64 = 1;
+const SHARED_PAYLOAD_VERSION: i64 = 1;
 const PAD_BLOCK: usize = 1024;
 const PAD_MARKER: u8 = 0x80;
 
@@ -38,22 +39,19 @@ fn invalid(message: impl Into<String>) -> VaultError {
 pub(super) fn encode(data: &VaultData) -> Result<Zeroizing<Vec<u8>>, VaultError> {
     reject_colliding_extras(data)?;
     let tree = WipedOnDrop(vault_value(data));
-    let mut bytes = Zeroizing::new(Vec::new());
-    ciborium::into_writer(&tree.0, &mut *bytes).map_err(|_| invalid("encoding failed"))?;
-    Ok(bytes)
+    to_cbor(&tree.0)
 }
 
 pub(super) fn decode(bytes: &[u8]) -> Result<VaultData, VaultError> {
-    let mut reader = bytes;
-    let value: Value = ciborium::from_reader(&mut reader).map_err(|_| invalid("not valid CBOR"))?;
-    if !reader.is_empty() {
-        return Err(invalid("trailing data after the payload"));
-    }
-    let mut fields = Fields::parse(value, "payload")?;
+    let mut fields = Fields::parse(from_cbor(bytes)?, "payload")?;
     let version = fields.int("v")?;
     if version != PAYLOAD_VERSION {
         return Err(VaultError::UnsupportedPayloadVersion(version));
     }
+    decode_vault_fields(fields)
+}
+
+fn decode_vault_fields(mut fields: Fields) -> Result<VaultData, VaultError> {
     let created_at = fields.int("created_at")?;
     let updated_at = fields.int("updated_at")?;
     let entries = fields
@@ -73,6 +71,63 @@ pub(super) fn decode(bytes: &[u8]) -> Result<VaultData, VaultError> {
         tombstones,
         extra: fields.into_extra(),
     })
+}
+
+/// The payload of a sync file: the vault's shared data under a revision number.
+pub(super) fn encode_shared(
+    data: &VaultData,
+    revision: u64,
+) -> Result<Zeroizing<Vec<u8>>, VaultError> {
+    reject_colliding_extras(data)?;
+    let mut vault = WipedOnDrop(vault_value(data));
+    if let Value::Map(pairs) = &mut vault.0 {
+        pairs.retain(|(key, _)| key.as_text() != Some("v"));
+    }
+    let tree = WipedOnDrop(map_value(
+        BTreeMap::from([
+            ("v".to_owned(), int(SHARED_PAYLOAD_VERSION)),
+            ("revision".to_owned(), Value::Integer(revision.into())),
+            (
+                "vault".to_owned(),
+                std::mem::replace(&mut vault.0, Value::Null),
+            ),
+        ]),
+        &Extra::new(),
+    ));
+    to_cbor(&tree.0)
+}
+
+pub(super) fn decode_shared(bytes: &[u8]) -> Result<(u64, VaultData), VaultError> {
+    let mut fields = Fields::parse(from_cbor(bytes)?, "payload")?;
+    let version = fields.int("v")?;
+    if version != SHARED_PAYLOAD_VERSION {
+        return Err(VaultError::UnsupportedPayloadVersion(version));
+    }
+    let revision = u64::try_from(fields.int("revision")?)
+        .ok()
+        .filter(|revision| *revision > 0)
+        .ok_or_else(|| invalid("`revision` must be 1 or more"))?;
+    let vault = Fields::parse(fields.take("vault")?, "vault")?;
+    // A field this version cannot keep would be lost on the next write.
+    if !fields.into_extra().is_empty() {
+        return Err(invalid("unknown field beside the vault"));
+    }
+    Ok((revision, decode_vault_fields(vault)?))
+}
+
+fn to_cbor(value: &Value) -> Result<Zeroizing<Vec<u8>>, VaultError> {
+    let mut bytes = Zeroizing::new(Vec::new());
+    ciborium::into_writer(value, &mut *bytes).map_err(|_| invalid("encoding failed"))?;
+    Ok(bytes)
+}
+
+fn from_cbor(bytes: &[u8]) -> Result<Value, VaultError> {
+    let mut reader = bytes;
+    let value = ciborium::from_reader(&mut reader).map_err(|_| invalid("not valid CBOR"))?;
+    if !reader.is_empty() {
+        return Err(invalid("trailing data after the payload"));
+    }
+    Ok(value)
 }
 
 /// Appends `0x80` and zeros up to the next multiple of 1024 bytes.

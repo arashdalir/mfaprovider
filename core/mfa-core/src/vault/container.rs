@@ -255,7 +255,7 @@ struct Parsed<'a> {
     body: &'a [u8],
 }
 
-fn array_at<const N: usize>(file: &[u8], offset: usize) -> [u8; N] {
+pub(super) fn array_at<const N: usize>(file: &[u8], offset: usize) -> [u8; N] {
     file[offset..offset + N]
         .try_into()
         .expect("offsets are checked against HEADER_END before parsing")
@@ -303,7 +303,7 @@ fn parse(file: &[u8]) -> Result<Parsed<'_>, VaultError> {
     })
 }
 
-fn encrypt(
+pub(super) fn encrypt(
     key: &[u8; KEY_LENGTH],
     nonce: &[u8; NONCE_LENGTH],
     aad: &[u8],
@@ -320,7 +320,7 @@ fn encrypt(
         .map_err(|_| VaultError::EncryptionFailed)
 }
 
-fn decrypt(
+pub(super) fn decrypt(
     key: &[u8; KEY_LENGTH],
     nonce: &[u8; NONCE_LENGTH],
     aad: &[u8],
