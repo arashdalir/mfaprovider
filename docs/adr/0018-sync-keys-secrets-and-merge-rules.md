@@ -1,6 +1,6 @@
 # ADR-0018: Sync keys, the sync secret, and merge rules
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-27 (rewritten the same day after review; the first draft gave all devices one vault key)
 - Related tasks: TASK-0017
 - Refines: ADR-0008 (sync through a user-selected file) and **replaces its rule "same password on all devices"**; ADR-0003 (crypto), ADR-0011 (file format)

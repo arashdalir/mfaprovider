@@ -3,7 +3,7 @@
 - Status: in-progress (phase 1)
 - Created: 2026-11-26
 - Updated: 2026-11-27
-- Related ADRs: ADR-0008 (accepted: sync via a user-selected cloud file, phased), ADR-0018 (proposed: master key, sync secret, merge rules); spec `docs/specs/sync-format-v1.md` (draft); guide `docs/sync.md`, ADR-0011 (vault file format), ADR-0003, ADR-0010 (proposed)
+- Related ADRs: ADR-0008 (accepted: sync via a user-selected cloud file, phased), ADR-0018 (accepted: master key, sync secret, merge rules); spec `docs/specs/sync-format-v1.md` (accepted); guide `docs/sync.md`, ADR-0011 (vault file format), ADR-0003, ADR-0010 (proposed)
 
 ## Goal
 (User request, 2026-11-26.) An account added on one device shows up on the others. The user also asked for a link-based setup (Google Drive or OneDrive link to a password-protected folder) where the link and password can be changed later.
@@ -37,7 +37,7 @@ A share *link* to a password-protected folder is a web page, not something an ap
 
 ## Breakdown of phase 1
 1. [x] Core: pure merge of two `VaultData` with tests (ADR-0018 rules). Does not depend on the key decision.
-2. [ ] Core: sync file container (spec, with golden vector), sync secret text form, typed `sync` field in the local vault (never copied into the sync file or an export, with tests), turn on / join / sync cycle / change sync password / new master key. **Needs ADR-0018 and the spec accepted.**
+2. [ ] Core: sync file container (spec, with golden vector), sync secret text form, typed `sync` field in the local vault (never copied into the sync file or an export, with tests), turn on / join / sync cycle / change sync password / new master key. (ADR-0018 and the spec accepted 2026-11-27.)
 3. [ ] `mfa-sync`: `StorageProvider` trait (read with version, write only over that version), file implementation, fake for tests.
 4. [ ] Shell and UI: turn on / join (scan or type the secret) / turn off, recovery sheet, choose the file, status and warnings, change sync password, new master key, replace a damaged file, conflicted copies. Keep `docs/sync.md` true to what is built.
 5. [ ] Android: Storage Access Framework plugin (pick or create a document, keep the permission); the picker excuse of ADR-0017 applies. **Biggest unknown:** whether the Drive and OneDrive apps give a lasting, writable document, and their writes are not atomic. Try this on the user's phone early.
@@ -48,5 +48,9 @@ A share *link* to a password-protected folder is a web page, not something an ap
 
 - 2026-11-27: Review discussion. The user chose: two passwords (device and sync), a separate master key instead of one shared vault key, and a second secret; asked for thorough GitHub documentation. ADR-0018 rewritten (still proposed), format spec drafted, guide `docs/sync.md` written. The merge code is unaffected.
 
+- 2026-11-27: The user accepted ADR-0018 and the format spec, and would prefer OneDrive.
+
+- 2026-11-27: Checked over adb on the Pixel: OneDrive 7.64.2 (`com.microsoft.skydrive`) is installed and registers a documents provider (`content.StorageAccessProvider`). This says nothing yet about whether a picked file stays writable.
+
 ## Next step
-The user reviews ADR-0018 and the format spec (step 2 depends on both). Independent of them: step 3 (`mfa-sync` storage provider) and the Android file-access trial of step 5 (ask which cloud service).
+Find out whether OneDrive on the user's phone offers other apps a lasting, writable file (step 5 trial), then step 2.

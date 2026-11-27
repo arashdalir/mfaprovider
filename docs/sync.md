@@ -1,6 +1,6 @@
 # Sync: how your accounts get to your other devices
 
-> **Status: designed, not yet available.** Only the merge logic exists in the code. The design ([ADR-0018](adr/0018-sync-keys-secrets-and-merge-rules.md)) and the [file format](specs/sync-format-v1.md) are awaiting review, and nothing here has had a security review.
+> **Status: designed, not yet available.** Only the merge logic exists in the code. The design ([ADR-0018](adr/0018-sync-keys-secrets-and-merge-rules.md)) and the [file format](specs/sync-format-v1.md) are accepted; nothing here has had a security review.
 
 Add an account on one device and it appears on the others. There is no mfa-provider server: your devices share one **encrypted file** that you place where your own cloud app (or Syncthing, or similar) carries it between them. Sync is off until you turn it on.
 

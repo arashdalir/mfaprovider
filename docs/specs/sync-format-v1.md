@@ -1,6 +1,6 @@
 # Sync file format, version 1
 
-Normative layout of the sync file (ADR-0018). Status: **draft**, to be reviewed together with ADR-0018 before any code. All integers are big-endian. A file is one header followed by one encrypted body. It is a separate format from the [vault file](vault-format-v1.md).
+Normative layout of the sync file (ADR-0018). Status: **accepted** with ADR-0018 (2026-11-27). All integers are big-endian. A file is one header followed by one encrypted body. It is a separate format from the [vault file](vault-format-v1.md).
 
 ## Container
 
