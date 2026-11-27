@@ -54,5 +54,13 @@ A share *link* to a password-protected folder is a web page, not something an ap
 
 - 2026-11-27: OneDrive trial built at the user's request: a temporary debug-only activity "Sync trial" in `app/src-tauri/gen/android/app/src/debug/` (**deliberately uncommitted; delete the folder afterwards**), writing only to files whose name contains `sync-trial`. Dummy file `mfa-sync-trial.txt` created in the PC's OneDrive folder. Four questions: pick the file; keep access after a restart; write and have it upload; see a change made on the PC.
 
+- 2026-11-27: **OneDrive trial results** (Pixel 10a, OneDrive 7.64.2; one run):
+  1. Picking `mfa-sync-trial.txt` in OneDrive: works (user).
+  2. Access after a phone restart: works; the screen showed `kept permission: read=true write=true` (user).
+  3. Writing with mode `wt`: `read-back MATCHES`; the line reached the PC, before and after the restart (checked on the PC; first one about 1 s after the phone's timestamp, by the file's modification time; second 2 s). No conflict copy seen.
+  4. Seeing a PC change: **the first read after the restart returned the old content**, the second the new (user). Probably a cached copy refreshed in the background; not proven. The phone's next write kept the PC's line.
+  Not tried: creating a new document from the app, `ContentResolver.refresh`, offline behaviour, writing while stale, interrupted writes, large delays. The phone log was lost in the restart.
+  **For the design:** one read must not be taken as current. A stale read is harmless to merge, but a write after it can replace a newer cloud version, and a content-hash version check would not notice; devices re-merge their own changes later (a password-slot change is the exception).
+
 ## Next step
-Run the trial with the user, record the answers, delete the debug folder, then step 2.
+Decide on the two optional trials (refresh before reading; creating a document), then delete `gen/android/app/src/debug/` and start step 2. Awaiting the user's answer on ADR-0019 (storage providers).

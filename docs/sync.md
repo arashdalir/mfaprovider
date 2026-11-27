@@ -120,7 +120,7 @@ Changing only the password is **not** enough after a leak: cloud services keep o
 - Sync is only as quick as your cloud app, and is not instant.
 - One lost or compromised device means a new master key for all.
 - Order of the list is not synced.
-- Android: whether the Google Drive and OneDrive apps give lasting write access to a file has **not been tested yet**.
+- Android with OneDrive: a first, small test (one phone, one run) could pick a file, keep access after a restart, and write changes that reached a PC. **The first read after a restart returned an old copy**; the next one was current. So a phone may briefly work from old data; changes made on each device are still combined at a later sync. Google Drive and other apps have not been tested.
 
 ## Roadmap
 Following [ADR-0008](adr/0008-sync.md): (1) a file you choose, in a synced folder; (2) WebDAV; (3) direct Google Drive and OneDrive support. Only phase 1 is designed in detail. Progress: [TASK-0017](tasks/open/0017-vault-sync.md).
