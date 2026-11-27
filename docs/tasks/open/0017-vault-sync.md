@@ -79,5 +79,8 @@ A share *link* to a password-protected folder is a web page, not something an ap
   - ADR-0018's "no export holds the sync settings" has no test yet because no export exists (TASK-0011 must add it). The sync payload is tested.
   - The warning for a returning old password lock belongs to ADR-0019 and is not built. The location is the accepted spec's single text.
 
+- 2026-11-27: The user **accepted ADR-0019** and agreed with the morning report’s suggestions: the app asks for the device password before changing the sync password, making a new master key, repairing the file or turning sync off; repair asks for the sync password twice and is offered only for a damaged or missing file. New request: password fields must be defined so password managers offer to save them, with the sync secret and the two passwords named apart so they never overwrite each other.
+  Plan: (1) record this as ADRs; (2) core: require the device password for those operations, test first; (3) UI: name the existing password fields for password managers, keep other secret fields out of them; (4) docs. The sync screens do not exist yet; they get the same rules in step 4.
+
 ## Next step
 The user reviews ADR-0019 and pushes (`git push` needs a GitHub sign-in), then CI must be checked. After that: step 3 (`mfa-sync` storage provider; its shape depends on ADR-0019).

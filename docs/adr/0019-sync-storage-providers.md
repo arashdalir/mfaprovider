@@ -1,6 +1,6 @@
 # ADR-0019: Sync storage providers, their settings, and reads that may be old
 
-- Status: proposed
+- Status: accepted (user, 2026-11-27)
 - Date: 2026-11-27
 - Related tasks: TASK-0017
 - Refines: ADR-0008 (phases behind a `StorageProvider` trait), ADR-0018. Would change one local field of the [sync file format](../specs/sync-format-v1.md); the shared file itself is unchanged.
