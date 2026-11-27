@@ -37,7 +37,7 @@ A share *link* to a password-protected folder is a web page, not something an ap
 
 ## Breakdown of phase 1
 1. [x] Core: pure merge of two `VaultData` with tests (ADR-0018 rules). Does not depend on the key decision.
-2. [ ] Core: sync file container (spec, with golden vector), sync secret text form, typed `sync` field in the local vault (never copied into the sync file or an export, with tests), turn on / join / sync cycle / change sync password / new master key. (ADR-0018 and the spec accepted 2026-11-27.)
+2. [x] Core: sync file container (spec, with golden vector), sync secret text form, typed `sync` field in the local vault (never copied into the sync file or an export, with tests), turn on / join / sync cycle / change sync password / new master key. (ADR-0018 and the spec accepted 2026-11-27.)
 3. [ ] `mfa-sync`: `StorageProvider` trait (read with version, write only over that version), file implementation, fake for tests.
 4. [ ] Shell and UI: turn on / join (scan or type the secret) / turn off, recovery sheet, choose the file, status and warnings, change sync password, new master key, replace a damaged file, conflicted copies. Keep `docs/sync.md` true to what is built.
 5. [ ] Android: Storage Access Framework plugin (pick or create a document, keep the permission); the picker excuse of ADR-0017 applies. **Biggest unknown:** whether the Drive and OneDrive apps give a lasting, writable document, and their writes are not atomic. Try this on the user's phone early.
@@ -69,7 +69,15 @@ A share *link* to a password-protected folder is a web page, not something an ap
   3. Update `docs/sync.md` and this file, push, check CI.
   Not planned for tonight: shell, UI, Android file access, anything on the phone.
 
-## Next step
-Plan item 2d. (2c done: typed `sync` field. Done earlier: item 1 ADR-0019 proposed; 2a sync secret; 2b sync file container with golden vector. The golden value pins this implementation; only HKDF was checked against an independent vector. An unknown field beside `revision` and `vault` in the payload is refused, since it could not be kept.)
+- 2026-11-27: **Step 2 done** (core only, nothing in the app calls it). `vault/sync_secret.rs`, `vault/sync_file.rs`, `vault/sync_state.rs`, `vault/session/sync_ops.rs`. Operations: `prepare_new_sync`/`commit_new_sync` (turn on, new master key), `prepare_join`/`preview_join`/`commit_join`, `sync`, `change_sync_password`, `replacement_sync_file`, `record_upload`, `disable_sync`, `reveal_sync_secret`, `sync_status`. They take and return bytes; file access is step 3. Checked locally: core 225 + 114 + 8 + 4 tests, shell 147, UI 191, fmt, clippy, typecheck. **CI not run (not pushed).**
+  Points the user should know:
+  - The golden vector was produced by this code: it pins the format and does not prove the cryptography; of it only HKDF is checked against an independent vector (RFC 5869). To be covered by the security review (TASK-0013).
+  - Only showing the sync secret asks for the device password in the core (as ADR-0018 says). Whether a password change, new master key, repair or turning sync off should ask too is for the shell step.
+  - A replacement file cannot verify the typed password, so the UI must ask for it twice. It must be offered only for a damaged or missing file.
+  - An unknown field beside `revision` and `vault` in a sync payload is refused (it could not be written back).
+  - Duplicates dropped on joining leave no deletion marker. If such an id had been shared through an earlier sync group and another device brings it back, the account would appear twice.
+  - ADR-0018's "no export holds the sync settings" has no test yet because no export exists (TASK-0011 must add it). The sync payload is tested.
+  - The warning for a returning old password lock belongs to ADR-0019 and is not built. The location is the accepted spec's single text.
 
-**Not pushed:** from commit 7ddcae1 on, `git push` needs the user to sign in to GitHub again; CI has not run on these commits.
+## Next step
+The user reviews ADR-0019 and pushes (`git push` needs a GitHub sign-in), then CI must be checked. After that: step 3 (`mfa-sync` storage provider; its shape depends on ADR-0019).
